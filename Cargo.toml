@@ -1,0 +1,11 @@
+[package]
+name = "libfreenect"
+version = "0.1.0"
+authors = ["James Buckley <xanium4332@gmail.com>"]
+
+[dependencies]
+libc = "0.1"
+bitflags = "0.3"
+
+[dependencies.libfreenect-sys]
+path = "../libfreenect-sys"
