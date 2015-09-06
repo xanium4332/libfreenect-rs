@@ -18,6 +18,8 @@ use libfreenect_sys::{
     freenect_list_device_attributes,
     freenect_free_device_attributes,
     freenect_supported_subdevices,
+    freenect_select_subdevices,
+    freenect_enabled_subdevices,
     freenect_device,
     freenect_open_device,
     freenect_open_device_by_camera_serial,
@@ -120,15 +122,15 @@ impl Context {
         unsafe { freenect_set_log_level(self.ctx.ctx, level.to_lowlevel()); }
     }
 
-    pub fn set_log_callback(&mut self) {
-
-    }
-
-    // Convert C callback parameters to rustified versions, then call user callback
-    fn callback_trampoline(dev: *mut freenect_context, level: freenect_loglevel, msg: *const c_char) {
-        let level = LogLevel::from_lowlevel(level);
-        let msg = unsafe { ffi::CStr::from_ptr(msg) };
-    }
+    // pub fn set_log_callback(&mut self) {
+    //
+    // }
+    //
+    // // Convert C callback parameters to rustified versions, then call user callback
+    // fn callback_trampoline(dev: *mut freenect_context, level: freenect_loglevel, msg: *const c_char) {
+    //     let level = LogLevel::from_lowlevel(level);
+    //     let msg = unsafe { ffi::CStr::from_ptr(msg) };
+    // }
 
     pub fn process_events(&mut self) -> FreenectResult<()> {
         match unsafe { freenect_process_events(self.ctx.ctx) } {
@@ -170,39 +172,74 @@ impl Context {
         Ok(device_list)
     }
 
-    pub fn open_device(&mut self, index: u32) -> FreenectResult<Device> {
+    fn select_subdevices(&mut self, subdevs: DeviceFlags) {
+        unsafe { freenect_select_subdevices(self.ctx.ctx, subdevs.bits) };
+    }
+
+    fn enabled_subdevices(&mut self) -> DeviceFlags {
+        let ret = unsafe { freenect_enabled_subdevices(self.ctx.ctx) };
+
+        return DeviceFlags::from_bits(ret as u32).unwrap();
+    }
+
+    pub fn open_device(&mut self, index: u32, subdevs: DeviceFlags) -> FreenectResult<Device> {
         let mut dev: *mut freenect_device = ptr::null_mut();
+
+        self.select_subdevices(subdevs);
 
         let ret = unsafe { freenect_open_device(self.ctx.ctx, &mut dev, index as i32) };
         if ret < 0 {
             return Err(FreenectError::LibraryReturnCode(ret))
         }
 
-        return Ok(Device{ctx: self.ctx.clone(), dev: dev});
+        return Ok(Device::from_raw_device(self.ctx.clone(), dev, self.enabled_subdevices()));
     }
 
-    pub fn open_device_by_camera_serial(&mut self, serial: &str) -> FreenectResult<Device> {
+    pub fn open_device_by_camera_serial(&mut self, serial: &str, subdevs: DeviceFlags) -> FreenectResult<Device> {
         let mut dev: *mut freenect_device = ptr::null_mut();
 
         let serial_cstring = ffi::CString::new(serial).unwrap();
+
+        self.select_subdevices(subdevs);
 
         let ret = unsafe { freenect_open_device_by_camera_serial(self.ctx.ctx, &mut dev, serial_cstring.as_ptr()) };
         if ret < 0 {
             return Err(FreenectError::LibraryReturnCode(ret))
         }
 
-        return Ok(Device::from_raw_device(self.ctx.clone(), dev));
+        return Ok(Device::from_raw_device(self.ctx.clone(), dev, self.enabled_subdevices()));
     }
+}
+
+pub struct MotorSubdevice {
+    dev: *mut freenect_device,
+}
+
+pub struct CameraSubdevice {
+    dev: *mut freenect_device,
+}
+
+pub struct AudioSubdevice {
+    dev: *mut freenect_device,
 }
 
 pub struct Device {
     ctx: Arc<InnerContext>, // Handle to prevent underlying context being free'd before device
     dev: *mut freenect_device,
+    pub motor:  Option<MotorSubdevice>,
+    pub camera: Option<CameraSubdevice>,
+    pub audio:  Option<AudioSubdevice>,
 }
 
 impl Device {
-    fn from_raw_device(ctx: Arc<InnerContext>, dev: *mut freenect_device) -> Device {
-        Device{ctx: ctx, dev: dev}
+    fn from_raw_device(ctx: Arc<InnerContext>, dev: *mut freenect_device, subdevs: DeviceFlags) -> Device {
+        Device {
+            ctx: ctx,
+            dev: dev,
+            motor:  if subdevs.contains(DEVICE_MOTOR)  { Some(MotorSubdevice{dev: dev})  } else { None },
+            camera: if subdevs.contains(DEVICE_CAMERA) { Some(CameraSubdevice{dev: dev}) } else { None },
+            audio:  if subdevs.contains(DEVICE_AUDIO)  { Some(AudioSubdevice{dev: dev})  } else { None },
+        }
     }
 }
 
