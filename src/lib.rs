@@ -14,11 +14,19 @@ use libfreenect_sys::{
     freenect_process_events,
     freenect_num_devices,
     freenect_device_flags,
+    freenect_device_attributes,
+    freenect_list_device_attributes,
+    freenect_free_device_attributes,
+    freenect_supported_subdevices,
+    freenect_device,
+    freenect_open_device,
+    freenect_open_device_by_camera_serial,
+    freenect_close_device,
 };
 
 use std::ptr;
 use std::ffi;
-use std::rc::Rc;
+use std::sync::Arc;
 
 enum FreenectError {
     LibraryReturnCode(i32),
@@ -62,13 +70,17 @@ bitflags! {
     }
 }
 
-pub struct Context {
+pub struct DeviceAttributes {
+    camera_serial: String,
+}
+
+struct InnerContext {
     ctx: *mut freenect_context,
 }
 
-impl Context {
-    pub fn new() -> FreenectResult<Context> {
-        let mut ctx = Context{ctx: ptr::null_mut()};
+impl InnerContext {
+    fn new() -> FreenectResult<InnerContext> {
+        let mut ctx = InnerContext{ctx: ptr::null_mut()};
 
         match unsafe { freenect_init(&mut ctx.ctx, ptr::null_mut()) } {
             0 => {
@@ -81,9 +93,31 @@ impl Context {
             x => Err(FreenectError::LibraryReturnCode(x)),
         }
     }
+}
+
+impl Drop for InnerContext {
+    fn drop(&mut self) {
+        let ret = unsafe { freenect_shutdown(self.ctx) };
+
+        if ret < 0 {
+            panic!(ret)
+        }
+    }
+}
+
+pub struct Context {
+    ctx: Arc<InnerContext>,
+}
+
+impl Context {
+    pub fn new() -> FreenectResult<Context> {
+        let inner_ctx = try!(InnerContext::new());
+
+        Ok(Context{ctx: Arc::new(inner_ctx)})
+    }
 
     pub fn set_log_level(&mut self, level: LogLevel) {
-        unsafe { freenect_set_log_level(self.ctx, level.to_lowlevel()); }
+        unsafe { freenect_set_log_level(self.ctx.ctx, level.to_lowlevel()); }
     }
 
     pub fn set_log_callback(&mut self) {
@@ -97,28 +131,92 @@ impl Context {
     }
 
     pub fn process_events(&mut self) -> FreenectResult<()> {
-        match unsafe { freenect_process_events(self.ctx) } {
+        match unsafe { freenect_process_events(self.ctx.ctx) } {
             0 => Ok(()),
             x => Err(FreenectError::LibraryReturnCode(x)),
         }
     }
 
     pub fn num_devices(&mut self) -> FreenectResult<u32> {
-        let ret = unsafe { freenect_num_devices(self.ctx) };
+        let ret = unsafe { freenect_num_devices(self.ctx.ctx) };
         if ret < 0 {
             Err(FreenectError::LibraryReturnCode(ret))
         } else {
             Ok(ret as u32)
         }
     }
+
+    pub fn list_device_attributes(&mut self) -> FreenectResult<Vec<DeviceAttributes>> {
+        let mut lowlevel_list: *mut freenect_device_attributes = ptr::null_mut();
+
+        let ret = unsafe { freenect_list_device_attributes(self.ctx.ctx, &mut lowlevel_list) };
+        if ret < 0 {
+            return Err(FreenectError::LibraryReturnCode(ret));
+        }
+
+        let mut device_list: Vec<DeviceAttributes> = Vec::new();
+
+        let mut curr_item = lowlevel_list;
+        while curr_item != ptr::null_mut() {
+            let serial_cstr = unsafe { ffi::CStr::from_ptr((*curr_item).camera_serial) };
+            let serial = String::from_utf8_lossy(serial_cstr.to_bytes()).to_string();
+
+            device_list.push(DeviceAttributes{camera_serial: serial});
+            unsafe { curr_item = (*curr_item).next };
+        }
+
+        unsafe { freenect_free_device_attributes(self.ctx.ctx, lowlevel_list) };
+
+        Ok(device_list)
+    }
+
+    pub fn open_device(&mut self, index: u32) -> FreenectResult<Device> {
+        let mut dev: *mut freenect_device = ptr::null_mut();
+
+        let ret = unsafe { freenect_open_device(self.ctx.ctx, &mut dev, index as i32) };
+        if ret < 0 {
+            return Err(FreenectError::LibraryReturnCode(ret))
+        }
+
+        return Ok(Device{ctx: self.ctx.clone(), dev: dev});
+    }
+
+    pub fn open_device_by_camera_serial(&mut self, serial: &str) -> FreenectResult<Device> {
+        let mut dev: *mut freenect_device = ptr::null_mut();
+
+        let serial_cstring = ffi::CString::new(serial).unwrap();
+
+        let ret = unsafe { freenect_open_device_by_camera_serial(self.ctx.ctx, &mut dev, serial_cstring.as_ptr()) };
+        if ret < 0 {
+            return Err(FreenectError::LibraryReturnCode(ret))
+        }
+
+        return Ok(Device::from_raw_device(self.ctx.clone(), dev));
+    }
 }
 
-impl Drop for Context {
+pub struct Device {
+    ctx: Arc<InnerContext>, // Handle to prevent underlying context being free'd before device
+    dev: *mut freenect_device,
+}
+
+impl Device {
+    fn from_raw_device(ctx: Arc<InnerContext>, dev: *mut freenect_device) -> Device {
+        Device{ctx: ctx, dev: dev}
+    }
+}
+
+impl Drop for Device {
     fn drop(&mut self) {
-        let ret = unsafe { freenect_shutdown(self.ctx) };
+        let ret = unsafe { freenect_close_device(self.dev) };
 
         if ret < 0 {
             panic!(ret)
         }
     }
+}
+
+pub fn supported_subdevices() -> DeviceFlags {
+    let bits = unsafe { freenect_supported_subdevices() as u32 };
+    return DeviceFlags::from_bits(bits).unwrap();
 }
