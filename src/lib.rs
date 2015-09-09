@@ -1,5 +1,10 @@
 extern crate libc;
-use libc::c_char;
+use libc::{
+    c_char,
+    c_void,
+    c_int,
+    uint32_t,
+};
 
 #[macro_use]
 extern crate bitflags;
@@ -24,6 +29,12 @@ use libfreenect_sys::{
     freenect_open_device,
     freenect_open_device_by_camera_serial,
     freenect_close_device,
+    freenect_set_depth_callback,
+    freenect_set_video_callback,
+    freenect_set_depth_chunk_callback,
+    freenect_set_video_chunk_callback,
+    freenect_get_user,
+    freenect_set_user,
 };
 
 use std::ptr;
@@ -211,6 +222,15 @@ impl Context {
     }
 }
 
+// Exists so it can be boxed (therefore fixing its memory address) and have its address handed as a
+// C callback user pointer
+struct ClosureHolder {
+    depth_cb: Option<Box<FnMut()>>,
+    video_cb: Option<Box<FnMut()>>,
+    depth_chunk_cb: Option<Box<FnMut()>>,
+    video_chunk_cb: Option<Box<FnMut()>>,
+}
+
 pub struct MotorSubdevice {
     dev: *mut freenect_device,
 }
@@ -226,6 +246,7 @@ pub struct AudioSubdevice {
 pub struct Device {
     ctx: Arc<InnerContext>, // Handle to prevent underlying context being free'd before device
     dev: *mut freenect_device,
+    ch: Box<ClosureHolder>,
     pub motor:  Option<MotorSubdevice>,
     pub camera: Option<CameraSubdevice>,
     pub audio:  Option<AudioSubdevice>,
@@ -233,12 +254,80 @@ pub struct Device {
 
 impl Device {
     fn from_raw_device(ctx: Arc<InnerContext>, dev: *mut freenect_device, subdevs: DeviceFlags) -> Device {
-        Device {
+        let mut dev = Device {
             ctx: ctx,
             dev: dev,
+            ch: Box::new(ClosureHolder {
+                depth_cb: None,
+                video_cb: None,
+                depth_chunk_cb: None,
+                video_chunk_cb: None,
+            }),
             motor:  if subdevs.contains(DEVICE_MOTOR)  { Some(MotorSubdevice{dev: dev})  } else { None },
-            camera: if subdevs.contains(DEVICE_CAMERA) { Some(CameraSubdevice{dev: dev}) } else { None },
+            camera: if subdevs.contains(DEVICE_CAMERA) {
+                        Some(CameraSubdevice{
+                            dev: dev,
+                            })
+                    } else {
+                        None
+                    },
             audio:  if subdevs.contains(DEVICE_AUDIO)  { Some(AudioSubdevice{dev: dev})  } else { None },
+        };
+
+        // Register all callbacks. We'll let Rust code decide if a user callback should be called.
+        unsafe {
+            freenect_set_user(dev.dev, std::mem::transmute(&mut *dev.ch));
+
+            freenect_set_depth_callback(dev.dev, Device::depth_cb_trampoline);
+            freenect_set_video_callback(dev.dev, Device::video_cb_trampoline);
+            freenect_set_depth_chunk_callback(dev.dev, Device::depth_chunk_cb_trampoline);
+            freenect_set_video_chunk_callback(dev.dev, Device::video_chunk_cb_trampoline);
+        }
+
+        return dev;
+    }
+
+    extern "C" fn depth_cb_trampoline(dev: *mut freenect_device, depth: *mut c_void, timestamp: uint32_t) {
+        unsafe {
+            let ch = freenect_get_user(dev) as *mut ClosureHolder;
+
+            match (*ch).depth_cb {
+                Some(ref mut cb) => cb(),
+                None => return,
+            };
+        }
+    }
+
+    extern "C" fn video_cb_trampoline(dev: *mut freenect_device, video: *mut c_void, timestamp: uint32_t) {
+        unsafe {
+            let ch = freenect_get_user(dev) as *mut ClosureHolder;
+
+            match (*ch).video_cb {
+                Some(ref mut cb) => cb(),
+                None => return,
+            };
+        }
+    }
+
+    extern "C" fn video_chunk_cb_trampoline(buffer: *mut c_void, pkt_data: *mut c_void, pkt_num: c_int, datalen: c_int, user_data: *mut c_void) {
+        unsafe {
+            let ch = user_data as *mut ClosureHolder;
+
+            match (*ch).video_chunk_cb {
+                Some(ref mut cb) => cb(),
+                None => return,
+            };
+        }
+    }
+
+    extern "C" fn depth_chunk_cb_trampoline(buffer: *mut c_void, pkt_data: *mut c_void, pkt_num: c_int, datalen: c_int, user_data: *mut c_void) {
+        unsafe {
+            let ch = user_data as *mut ClosureHolder;
+
+            match (*ch).depth_chunk_cb {
+                Some(ref mut cb) => cb(),
+                None => return,
+            };
         }
     }
 }
