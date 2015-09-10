@@ -1,3 +1,7 @@
+use std::ffi;
+use std::ptr;
+use std::rc::Rc;
+
 extern crate libc;
 use libc::{
     c_char,
@@ -35,17 +39,18 @@ use libfreenect_sys::{
     freenect_set_video_chunk_callback,
     freenect_get_user,
     freenect_set_user,
+    freenect_start_depth,
+    freenect_start_video,
+    freenect_stop_depth,
+    freenect_stop_video,
 };
-
-use std::ptr;
-use std::ffi;
-use std::sync::Arc;
 
 enum FreenectError {
     LibraryReturnCode(i32),
     NullPtr,
 }
 
+// Error type for the library
 pub type FreenectResult<T> = Result<T, FreenectError>;
 
 pub enum LogLevel {
@@ -59,6 +64,7 @@ pub enum LogLevel {
 	Flood,         // Log EVERYTHING. May slow performance.
 }
 
+// FIXME: TBD remaining log levels
 impl LogLevel {
     fn to_lowlevel(self) -> freenect_loglevel {
         match self {
@@ -84,7 +90,7 @@ bitflags! {
 }
 
 pub struct DeviceAttributes {
-    camera_serial: String,
+    pub camera_serial: String,
 }
 
 struct InnerContext {
@@ -119,14 +125,14 @@ impl Drop for InnerContext {
 }
 
 pub struct Context {
-    ctx: Arc<InnerContext>,
+    ctx: Rc<InnerContext>,
 }
 
 impl Context {
     pub fn new() -> FreenectResult<Context> {
         let inner_ctx = try!(InnerContext::new());
 
-        Ok(Context{ctx: Arc::new(inner_ctx)})
+        Ok(Context{ctx: Rc::new(inner_ctx)})
     }
 
     pub fn set_log_level(&mut self, level: LogLevel) {
@@ -223,7 +229,7 @@ impl Context {
 }
 
 // Exists so it can be boxed (therefore fixing its memory address) and have its address handed as a
-// C callback user pointer
+// C callback userdata  void pointer
 struct ClosureHolder {
     depth_cb: Option<Box<FnMut()>>,
     video_cb: Option<Box<FnMut()>>,
@@ -244,7 +250,7 @@ pub struct AudioSubdevice {
 }
 
 pub struct Device {
-    ctx: Arc<InnerContext>, // Handle to prevent underlying context being free'd before device
+    ctx: Rc<InnerContext>, // Handle to prevent underlying context being free'd before device
     dev: *mut freenect_device,
     ch: Box<ClosureHolder>,
     pub motor:  Option<MotorSubdevice>,
@@ -253,7 +259,7 @@ pub struct Device {
 }
 
 impl Device {
-    fn from_raw_device(ctx: Arc<InnerContext>, dev: *mut freenect_device, subdevs: DeviceFlags) -> Device {
+    fn from_raw_device(ctx: Rc<InnerContext>, dev: *mut freenect_device, subdevs: DeviceFlags) -> Device {
         let mut dev = Device {
             ctx: ctx,
             dev: dev,
@@ -328,6 +334,62 @@ impl Device {
                 Some(ref mut cb) => cb(),
                 None => return,
             };
+        }
+    }
+
+    fn set_depth_callback(&mut self, cb: Option<Box<FnMut()>>) {
+        self.ch.depth_cb = cb;
+    }
+
+    fn set_video_callback(&mut self, cb: Option<Box<FnMut()>>) {
+        self.ch.video_cb = cb;
+    }
+
+    fn set_depth_chunk_callback(&mut self, cb: Option<Box<FnMut()>>) {
+        self.ch.depth_chunk_cb = cb;
+    }
+
+    fn set_video_chunk_callback(&mut self, cb: Option<Box<FnMut()>>) {
+        self.ch.video_chunk_cb = cb;
+    }
+
+    pub fn start_depth(&mut self) -> FreenectResult<()> {
+        let ret = unsafe { freenect_start_depth(self.dev)};
+
+        if ret == 0 {
+            Ok(())
+        } else {
+            Err(FreenectError::LibraryReturnCode(ret))
+        }
+    }
+
+    pub fn start_video(&mut self) -> FreenectResult<()> {
+        let ret = unsafe { freenect_start_video(self.dev)};
+
+        if ret == 0 {
+            Ok(())
+        } else {
+            Err(FreenectError::LibraryReturnCode(ret))
+        }
+    }
+
+    pub fn stop_depth(&mut self) -> FreenectResult<()> {
+        let ret = unsafe { freenect_stop_depth(self.dev)};
+
+        if ret == 0 {
+            Ok(())
+        } else {
+            Err(FreenectError::LibraryReturnCode(ret))
+        }
+    }
+
+    pub fn stop_video(&mut self) -> FreenectResult<()> {
+        let ret = unsafe { freenect_stop_video(self.dev)};
+
+        if ret == 0 {
+            Ok(())
+        } else {
+            Err(FreenectError::LibraryReturnCode(ret))
         }
     }
 }
