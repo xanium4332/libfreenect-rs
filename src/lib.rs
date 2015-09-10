@@ -8,6 +8,7 @@ use libc::{
     c_void,
     c_int,
     uint32_t,
+    int32_t,
 };
 
 #[macro_use]
@@ -21,6 +22,8 @@ use libfreenect_sys::{
     freenect_loglevel,
     freenect_video_format,
     freenect_depth_format,
+    freenect_resolution,
+    freenect_frame_mode,
     freenect_set_log_level,
     freenect_process_events,
     freenect_num_devices,
@@ -83,13 +86,6 @@ impl LogLevel {
     }
 }
 
-#[repr(C)] pub enum freenect_resolution {
-	FREENECT_RESOLUTION_LOW    = 0, // QVGA - 320x240
-	FREENECT_RESOLUTION_MEDIUM = 1, // VGA  - 640x480
-	FREENECT_RESOLUTION_HIGH   = 2, // SXGA - 1280x1024
-	FREENECT_RESOLUTION_DUMMY  = 2147483647, // Dummy value to force enum to be 32 bits wide
-}
-
 pub enum Resolution {
     Low,
     Medium,
@@ -105,8 +101,8 @@ impl Resolution {
         }
     }
 
-    fn from_lowlevel(res: freenect_resolution) -> Resolution {
-        match res {
+    fn from_lowlevel(res: &freenect_resolution) -> Resolution {
+        match *res {
             freenect_resolution::FREENECT_RESOLUTION_LOW    => Resolution::Low,
             freenect_resolution::FREENECT_RESOLUTION_MEDIUM => Resolution::Medium,
             freenect_resolution::FREENECT_RESOLUTION_HIGH   => Resolution::High,
@@ -138,15 +134,15 @@ impl VideoFormat {
         }
     }
 
-    fn from_lowlevel(fmt: freenect_video_format) -> VideoFormat {
-        match fmt {
-            freenect_video_format::FREENECT_VIDEO_RGB               => VideoFormat::Rgb,
-            freenect_video_format::FREENECT_VIDEO_BAYER             => VideoFormat::Bayer,
-            freenect_video_format::FREENECT_VIDEO_IR_8BIT           => VideoFormat::Ir8Bit,
-            freenect_video_format::FREENECT_VIDEO_IR_10BIT          => VideoFormat::Ir10Bit,
-            freenect_video_format::FREENECT_VIDEO_IR_10BIT_PACKED   => VideoFormat::Ir10BitPacked,
-            freenect_video_format::FREENECT_VIDEO_YUV_RGB           => VideoFormat::YuvRgb,
-            freenect_video_format::FREENECT_VIDEO_YUV_RAW           => VideoFormat::YuvRaw,
+    fn from_lowlevel_int(i: int32_t) -> VideoFormat {
+        match i {
+            0 => VideoFormat::Rgb,
+            1 => VideoFormat::Bayer,
+            2 => VideoFormat::Ir8Bit,
+            3 => VideoFormat::Ir10Bit,
+            4 => VideoFormat::Ir10BitPacked,
+            5 => VideoFormat::YuvRgb,
+            6 => VideoFormat::YuvRaw,
             _ => panic!("Unknown freenect_video_format enum"),
         }
     }
@@ -173,18 +169,94 @@ impl DepthFormat {
         }
     }
 
-    fn from_lowlevel(fmt: freenect_depth_format) -> DepthFormat {
-        match fmt {
-            freenect_depth_format::FREENECT_DEPTH_11BIT        => DepthFormat::_11Bit,
-        	freenect_depth_format::FREENECT_DEPTH_10BIT        => DepthFormat::_10Bit,
-        	freenect_depth_format::FREENECT_DEPTH_11BIT_PACKED => DepthFormat::_11BitPacked,
-        	freenect_depth_format::FREENECT_DEPTH_10BIT_PACKED => DepthFormat::_10BitPacked,
-        	freenect_depth_format::FREENECT_DEPTH_REGISTERED   => DepthFormat::Registered,
-        	freenect_depth_format::FREENECT_DEPTH_MM           => DepthFormat::Mm,
+    fn from_lowlevel_int(i: int32_t) -> DepthFormat {
+        match i {
+            0 => DepthFormat::_11Bit,
+        	1 => DepthFormat::_10Bit,
+        	2 => DepthFormat::_11BitPacked,
+        	3 => DepthFormat::_10BitPacked,
+        	4 => DepthFormat::Registered,
+        	5 => DepthFormat::Mm,
         	_ => panic!("Unknown freenect_depth_format enum"),
         }
     }
 }
+
+enum FrameModeFormat {
+    Video(VideoFormat),
+    Depth(DepthFormat),
+}
+
+struct FrameMode {
+    reserved: uint32_t, // Need to track contents of underlying freenect struct
+    resolution: Resolution,
+    format: FrameModeFormat,
+    bytes: i32,
+    width: i16,
+    height: i16,
+    data_bits_per_pixel: i8,
+    padding_bits_per_pixel: i8,
+    framerate: i8,
+    is_valid: bool,
+}
+
+impl FrameMode {
+    fn to_lowlevel(&self) -> freenect_frame_mode {
+        freenect_frame_mode {
+            reserved: self.reserved,
+            resolution: self.resolution.to_lowlevel(),
+            dummy: match self.format {
+                    FrameModeFormat::Video(ref x) => x.to_lowlevel() as int32_t,
+                    FrameModeFormat::Depth(ref y) => y.to_lowlevel() as int32_t,
+            },
+            bytes: self.bytes,
+            width: self.width,
+            height: self.height,
+            data_bits_per_pixel: self.data_bits_per_pixel,
+            padding_bits_per_pixel: self.padding_bits_per_pixel,
+            framerate: self.framerate,
+            is_valid: if self.is_valid { 1 } else { 0 },
+        }
+    }
+
+    fn to_lowlevel_video(&self) -> Option<freenect_frame_mode> {
+        match self.format {
+            FrameModeFormat::Video(ref x) => Some(self.to_lowlevel()),
+            FrameModeFormat::Depth(_) => None,
+        }
+    }
+
+    fn to_lowlevel_depth(&self) -> Option<freenect_frame_mode> {
+        match self.format {
+            FrameModeFormat::Depth(ref x) => Some(self.to_lowlevel()),
+            FrameModeFormat::Video(_) => None,
+        }
+    }
+
+    fn from_lowlevel(mode: &freenect_frame_mode, fmt: FrameModeFormat) -> FrameMode {
+        FrameMode {
+            reserved: mode.reserved,
+            resolution: Resolution::from_lowlevel(&mode.resolution),
+            format: fmt,
+            bytes: mode.bytes as i32,
+            width: mode.width as i16,
+            height: mode.height as i16,
+            data_bits_per_pixel: mode.data_bits_per_pixel as i8,
+            padding_bits_per_pixel: mode.padding_bits_per_pixel as i8,
+            framerate: mode.framerate as i8,
+            is_valid: if mode.is_valid > 0 { true } else { false },
+        }
+    }
+
+    fn from_lowlevel_video(mode: &freenect_frame_mode) -> FrameMode {
+        FrameMode::from_lowlevel(mode, FrameModeFormat::Video(VideoFormat::from_lowlevel_int(mode.dummy)))
+    }
+
+    fn from_lowlevel_depth(mode: &freenect_frame_mode) -> FrameMode {
+        FrameMode::from_lowlevel(mode, FrameModeFormat::Depth(DepthFormat::from_lowlevel_int(mode.dummy)))
+    }
+}
+
 
 bitflags! {
     flags DeviceFlags: u32 {
@@ -473,6 +545,10 @@ impl Device {
             Err(FreenectError::LibraryReturnCode(ret))
         }
     }
+
+    // pub fn get_video_mode(&mut self) -> FrameMode
+
+    // pub fn freenect_get_video_mode(mode_num: c_int) -> freenect_frame_mode;
 }
 
 impl Drop for Device {
