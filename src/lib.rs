@@ -19,6 +19,8 @@ use libfreenect_sys::{
     freenect_init,
     freenect_shutdown,
     freenect_loglevel,
+    freenect_video_format,
+    freenect_depth_format,
     freenect_set_log_level,
     freenect_process_events,
     freenect_num_devices,
@@ -66,8 +68,8 @@ pub enum LogLevel {
 
 // FIXME: TBD remaining log levels
 impl LogLevel {
-    fn to_lowlevel(self) -> freenect_loglevel {
-        match self {
+    fn to_lowlevel(&self) -> freenect_loglevel {
+        match *self {
             LogLevel::Fatal => freenect_loglevel::FREENECT_LOG_FATAL,
             _ => freenect_loglevel::FREENECT_LOG_FATAL,
         }
@@ -77,6 +79,109 @@ impl LogLevel {
         match lvl {
             freenect_loglevel::FREENECT_LOG_FATAL => LogLevel::Fatal,
             _ => LogLevel::Fatal
+        }
+    }
+}
+
+#[repr(C)] pub enum freenect_resolution {
+	FREENECT_RESOLUTION_LOW    = 0, // QVGA - 320x240
+	FREENECT_RESOLUTION_MEDIUM = 1, // VGA  - 640x480
+	FREENECT_RESOLUTION_HIGH   = 2, // SXGA - 1280x1024
+	FREENECT_RESOLUTION_DUMMY  = 2147483647, // Dummy value to force enum to be 32 bits wide
+}
+
+pub enum Resolution {
+    Low,
+    Medium,
+    High,
+}
+
+impl Resolution {
+    fn to_lowlevel(&self) -> freenect_resolution {
+        match *self {
+            Resolution::Low     => freenect_resolution::FREENECT_RESOLUTION_LOW,
+            Resolution::Medium  => freenect_resolution::FREENECT_RESOLUTION_MEDIUM,
+            Resolution::High    => freenect_resolution::FREENECT_RESOLUTION_HIGH,
+        }
+    }
+
+    fn from_lowlevel(res: freenect_resolution) -> Resolution {
+        match res {
+            freenect_resolution::FREENECT_RESOLUTION_LOW    => Resolution::Low,
+            freenect_resolution::FREENECT_RESOLUTION_MEDIUM => Resolution::Medium,
+            freenect_resolution::FREENECT_RESOLUTION_HIGH   => Resolution::High,
+            _ => panic!("Unknown freenect_resolution enum")
+        }
+    }
+}
+
+pub enum VideoFormat {
+    Rgb,
+    Bayer,
+    Ir8Bit,
+    Ir10Bit,
+    Ir10BitPacked,
+    YuvRgb,
+    YuvRaw,
+}
+
+impl VideoFormat {
+    fn to_lowlevel(&self) -> freenect_video_format {
+        match *self {
+            VideoFormat::Rgb            => freenect_video_format::FREENECT_VIDEO_RGB,
+            VideoFormat::Bayer          => freenect_video_format::FREENECT_VIDEO_BAYER,
+            VideoFormat::Ir8Bit         => freenect_video_format::FREENECT_VIDEO_IR_8BIT,
+            VideoFormat::Ir10Bit        => freenect_video_format::FREENECT_VIDEO_IR_10BIT,
+            VideoFormat::Ir10BitPacked  => freenect_video_format::FREENECT_VIDEO_IR_10BIT_PACKED,
+            VideoFormat::YuvRgb         => freenect_video_format::FREENECT_VIDEO_YUV_RGB,
+            VideoFormat::YuvRaw         => freenect_video_format::FREENECT_VIDEO_YUV_RAW,
+        }
+    }
+
+    fn from_lowlevel(fmt: freenect_video_format) -> VideoFormat {
+        match fmt {
+            freenect_video_format::FREENECT_VIDEO_RGB               => VideoFormat::Rgb,
+            freenect_video_format::FREENECT_VIDEO_BAYER             => VideoFormat::Bayer,
+            freenect_video_format::FREENECT_VIDEO_IR_8BIT           => VideoFormat::Ir8Bit,
+            freenect_video_format::FREENECT_VIDEO_IR_10BIT          => VideoFormat::Ir10Bit,
+            freenect_video_format::FREENECT_VIDEO_IR_10BIT_PACKED   => VideoFormat::Ir10BitPacked,
+            freenect_video_format::FREENECT_VIDEO_YUV_RGB           => VideoFormat::YuvRgb,
+            freenect_video_format::FREENECT_VIDEO_YUV_RAW           => VideoFormat::YuvRaw,
+            _ => panic!("Unknown freenect_video_format enum"),
+        }
+    }
+}
+
+pub enum DepthFormat {
+    _11Bit,
+    _10Bit,
+    _11BitPacked,
+    _10BitPacked,
+    Registered,
+    Mm
+}
+
+impl DepthFormat {
+    fn to_lowlevel(&self) -> freenect_depth_format {
+        match *self {
+            DepthFormat::_11Bit         => freenect_depth_format::FREENECT_DEPTH_11BIT,
+            DepthFormat::_10Bit         => freenect_depth_format::FREENECT_DEPTH_10BIT,
+            DepthFormat::_11BitPacked   => freenect_depth_format::FREENECT_DEPTH_11BIT_PACKED,
+            DepthFormat::_10BitPacked   => freenect_depth_format::FREENECT_DEPTH_10BIT_PACKED,
+            DepthFormat::Registered     => freenect_depth_format::FREENECT_DEPTH_REGISTERED,
+            DepthFormat::Mm             => freenect_depth_format::FREENECT_DEPTH_MM,
+        }
+    }
+
+    fn from_lowlevel(fmt: freenect_depth_format) -> DepthFormat {
+        match fmt {
+            freenect_depth_format::FREENECT_DEPTH_11BIT        => DepthFormat::_11Bit,
+        	freenect_depth_format::FREENECT_DEPTH_10BIT        => DepthFormat::_10Bit,
+        	freenect_depth_format::FREENECT_DEPTH_11BIT_PACKED => DepthFormat::_11BitPacked,
+        	freenect_depth_format::FREENECT_DEPTH_10BIT_PACKED => DepthFormat::_10BitPacked,
+        	freenect_depth_format::FREENECT_DEPTH_REGISTERED   => DepthFormat::Registered,
+        	freenect_depth_format::FREENECT_DEPTH_MM           => DepthFormat::Mm,
+        	_ => panic!("Unknown freenect_depth_format enum"),
         }
     }
 }
@@ -97,6 +202,9 @@ struct InnerContext {
     ctx: *mut freenect_context,
 }
 
+// InnerContext separated from main Context so that 'Device' handles can hold a reference to the
+// InnerContext to prevent premature release. Could also use lifetimes (probably) to statically
+// enforce this.
 impl InnerContext {
     fn new() -> FreenectResult<InnerContext> {
         let mut ctx = InnerContext{ctx: ptr::null_mut()};
@@ -139,22 +247,14 @@ impl Context {
         unsafe { freenect_set_log_level(self.ctx.ctx, level.to_lowlevel()); }
     }
 
-    // pub fn set_log_callback(&mut self) {
-    //
-    // }
-    //
-    // // Convert C callback parameters to rustified versions, then call user callback
-    // fn callback_trampoline(dev: *mut freenect_context, level: freenect_loglevel, msg: *const c_char) {
-    //     let level = LogLevel::from_lowlevel(level);
-    //     let msg = unsafe { ffi::CStr::from_ptr(msg) };
-    // }
-
     pub fn process_events(&mut self) -> FreenectResult<()> {
         match unsafe { freenect_process_events(self.ctx.ctx) } {
             0 => Ok(()),
             x => Err(FreenectError::LibraryReturnCode(x)),
         }
     }
+
+    // FIXME: Implement process_events with timeout
 
     pub fn num_devices(&mut self) -> FreenectResult<u32> {
         let ret = unsafe { freenect_num_devices(self.ctx.ctx) };
@@ -189,10 +289,12 @@ impl Context {
         Ok(device_list)
     }
 
+    // Internal use only
     fn select_subdevices(&mut self, subdevs: DeviceFlags) {
         unsafe { freenect_select_subdevices(self.ctx.ctx, subdevs.bits) };
     }
 
+    // Internal use only
     fn enabled_subdevices(&mut self) -> DeviceFlags {
         let ret = unsafe { freenect_enabled_subdevices(self.ctx.ctx) };
 
@@ -226,27 +328,6 @@ impl Context {
 
         return Ok(Device::from_raw_device(self.ctx.clone(), dev, self.enabled_subdevices()));
     }
-}
-
-// Exists so it can be boxed (therefore fixing its memory address) and have its address handed as a
-// C callback userdata  void pointer
-struct ClosureHolder {
-    depth_cb: Option<Box<FnMut()>>,
-    video_cb: Option<Box<FnMut()>>,
-    depth_chunk_cb: Option<Box<FnMut()>>,
-    video_chunk_cb: Option<Box<FnMut()>>,
-}
-
-pub struct MotorSubdevice {
-    dev: *mut freenect_device,
-}
-
-pub struct CameraSubdevice {
-    dev: *mut freenect_device,
-}
-
-pub struct AudioSubdevice {
-    dev: *mut freenect_device,
 }
 
 pub struct Device {
@@ -402,6 +483,27 @@ impl Drop for Device {
             panic!(ret)
         }
     }
+}
+
+// Exists so it can be boxed (therefore fixing its memory address) and have its address handed as a
+// C callback userdata  void pointer
+struct ClosureHolder {
+    depth_cb: Option<Box<FnMut()>>,
+    video_cb: Option<Box<FnMut()>>,
+    depth_chunk_cb: Option<Box<FnMut()>>,
+    video_chunk_cb: Option<Box<FnMut()>>,
+}
+
+pub struct MotorSubdevice {
+    dev: *mut freenect_device,
+}
+
+pub struct CameraSubdevice {
+    dev: *mut freenect_device,
+}
+
+pub struct AudioSubdevice {
+    dev: *mut freenect_device,
 }
 
 pub fn supported_subdevices() -> DeviceFlags {
