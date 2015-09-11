@@ -48,11 +48,17 @@ use libfreenect_sys::{
     freenect_start_video,
     freenect_stop_depth,
     freenect_stop_video,
+    freenect_get_video_mode_count,
+    freenect_get_video_mode,
+    freenect_get_current_video_mode,
+    freenect_find_video_mode,
+    freenect_set_video_mode,
 };
 
 enum FreenectError {
     LibraryReturnCode(i32),
     NullPtr,
+    FrameFormatMismatch,
 }
 
 // Error type for the library
@@ -187,7 +193,7 @@ enum FrameModeFormat {
     Depth(DepthFormat),
 }
 
-struct FrameMode {
+pub struct FrameMode {
     reserved: uint32_t, // Need to track contents of underlying freenect struct
     resolution: Resolution,
     format: FrameModeFormat,
@@ -206,8 +212,8 @@ impl FrameMode {
             reserved: self.reserved,
             resolution: self.resolution.to_lowlevel(),
             dummy: match self.format {
-                    FrameModeFormat::Video(ref x) => x.to_lowlevel() as int32_t,
-                    FrameModeFormat::Depth(ref y) => y.to_lowlevel() as int32_t,
+                FrameModeFormat::Video(ref x) => x.to_lowlevel() as int32_t,
+                FrameModeFormat::Depth(ref y) => y.to_lowlevel() as int32_t,
             },
             bytes: self.bytes,
             width: self.width,
@@ -417,6 +423,7 @@ impl Device {
             ctx: ctx,
             dev: dev,
             ch: Box::new(ClosureHolder {
+                dev: dev,
                 depth_cb: None,
                 video_cb: None,
                 depth_chunk_cb: None,
@@ -460,6 +467,8 @@ impl Device {
     extern "C" fn video_cb_trampoline(dev: *mut freenect_device, video: *mut c_void, timestamp: uint32_t) {
         unsafe {
             let ch = freenect_get_user(dev) as *mut ClosureHolder;
+
+            // let mode = (*(*ch).dev).get_current_video_mode();
 
             match (*ch).video_cb {
                 Some(ref mut cb) => cb(),
@@ -546,7 +555,16 @@ impl Device {
         }
     }
 
-    // pub fn get_video_mode(&mut self) -> FrameMode
+    pub fn get_current_video_mode(&mut self) -> FrameMode {
+        let lowlevel_video_mode = unsafe { freenect_get_current_video_mode(self.dev) };
+        FrameMode::from_lowlevel_video(&lowlevel_video_mode)
+    }
+
+    pub fn set_video_mode(&mut self, mode: FrameMode) -> FreenectResult<()> {
+        let mut lowlevel_video_mode = try!(mode.to_lowlevel_video().ok_or(FreenectError::FrameFormatMismatch));
+        unsafe { freenect_set_video_mode(self.dev, lowlevel_video_mode) };
+        Ok(())
+    }
 
     // pub fn freenect_get_video_mode(mode_num: c_int) -> freenect_frame_mode;
 }
@@ -564,6 +582,7 @@ impl Drop for Device {
 // Exists so it can be boxed (therefore fixing its memory address) and have its address handed as a
 // C callback userdata  void pointer
 struct ClosureHolder {
+    dev: *mut freenect_device,
     depth_cb: Option<Box<FnMut()>>,
     video_cb: Option<Box<FnMut()>>,
     depth_chunk_cb: Option<Box<FnMut()>>,
