@@ -42,8 +42,6 @@ use libfreenect_sys::{
     freenect_close_device,
     freenect_set_depth_callback,
     freenect_set_video_callback,
-    freenect_set_depth_chunk_callback,
-    freenect_set_video_chunk_callback,
     freenect_get_user,
     freenect_set_user,
     freenect_start_depth,
@@ -463,8 +461,6 @@ impl Device {
                 dev: inner_dev.clone(),
                 depth_cb: None,
                 video_cb: None,
-                depth_chunk_cb: None,
-                video_chunk_cb: None,
             }),
             motor:  if subdevs.contains(DEVICE_MOTOR)  { Some(MotorSubdevice{dev: inner_dev.clone()})  } else { None },
             camera: if subdevs.contains(DEVICE_CAMERA) {
@@ -485,8 +481,6 @@ impl Device {
 
             freenect_set_depth_callback(inner_dev.dev, Device::depth_cb_trampoline);
             freenect_set_video_callback(inner_dev.dev, Device::video_cb_trampoline);
-            freenect_set_depth_chunk_callback(inner_dev.dev, Device::depth_chunk_cb_trampoline);
-            freenect_set_video_chunk_callback(inner_dev.dev, Device::video_chunk_cb_trampoline);
         }
 
         return dev;
@@ -521,42 +515,12 @@ impl Device {
         }
     }
 
-    extern "C" fn video_chunk_cb_trampoline(buffer: *mut c_void, pkt_data: *mut c_void, pkt_num: c_int, datalen: c_int, user_data: *mut c_void) {
-        unsafe {
-            let ch = user_data as *mut ClosureHolder;
-
-            match (*ch).video_chunk_cb {
-                Some(ref mut cb) => cb(),
-                None => return,
-            };
-        }
-    }
-
-    extern "C" fn depth_chunk_cb_trampoline(buffer: *mut c_void, pkt_data: *mut c_void, pkt_num: c_int, datalen: c_int, user_data: *mut c_void) {
-        unsafe {
-            let ch = user_data as *mut ClosureHolder;
-
-            match (*ch).depth_chunk_cb {
-                Some(ref mut cb) => cb(),
-                None => return,
-            };
-        }
-    }
-
     pub fn set_depth_callback(&mut self, cb: Option<Box<FnMut()>>) {
         self.ch.depth_cb = cb;
     }
 
     pub fn set_video_callback(&mut self, cb: Option<Box<FnMut(&mut [u8], u32)>>) {
         self.ch.video_cb = cb;
-    }
-
-    pub fn set_depth_chunk_callback(&mut self, cb: Option<Box<FnMut()>>) {
-        self.ch.depth_chunk_cb = cb;
-    }
-
-    pub fn set_video_chunk_callback(&mut self, cb: Option<Box<FnMut()>>) {
-        self.ch.video_chunk_cb = cb;
     }
 
     pub fn start_depth(&mut self) -> FreenectResult<()> {
@@ -618,8 +582,6 @@ struct ClosureHolder {
     dev: Rc<RefCell<InnerDevice>>,
     depth_cb: Option<Box<FnMut()>>,
     video_cb: Option<Box<FnMut(&mut [u8], u32)>>,
-    depth_chunk_cb: Option<Box<FnMut()>>,
-    video_chunk_cb: Option<Box<FnMut()>>,
 }
 
 pub struct MotorSubdevice {
