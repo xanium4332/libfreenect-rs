@@ -92,14 +92,14 @@ impl LogLevel {
 
     fn from_lowlevel(lvl: freenect_loglevel) -> LogLevel {
         match lvl {
-            freenect_loglevel::FREENECT_LOG_FATAL   => LogLevel::Fatal
-            freenect_loglevel::FREENECT_LOG_ERROR   => LogLevel::Error
-            freenect_loglevel::FREENECT_LOG_WARNING => LogLevel::Warning
-            freenect_loglevel::FREENECT_LOG_NOTICE  => LogLevel::Notice
-            freenect_loglevel::FREENECT_LOG_INFO    => LogLevel::Info
-            freenect_loglevel::FREENECT_LOG_DEBUG   => LogLevel::Debug
-            freenect_loglevel::FREENECT_LOG_SPEW    => LogLevel::Spew
-            freenect_loglevel::FREENECT_LOG_FLOOD   => LogLevel::Flood
+            freenect_loglevel::FREENECT_LOG_FATAL   => LogLevel::Fatal,
+            freenect_loglevel::FREENECT_LOG_ERROR   => LogLevel::Error,
+            freenect_loglevel::FREENECT_LOG_WARNING => LogLevel::Warning,
+            freenect_loglevel::FREENECT_LOG_NOTICE  => LogLevel::Notice,
+            freenect_loglevel::FREENECT_LOG_INFO    => LogLevel::Info,
+            freenect_loglevel::FREENECT_LOG_DEBUG   => LogLevel::Debug,
+            freenect_loglevel::FREENECT_LOG_SPEW    => LogLevel::Spew,
+            freenect_loglevel::FREENECT_LOG_FLOOD   => LogLevel::Flood,
         }
     }
 }
