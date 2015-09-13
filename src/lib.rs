@@ -81,15 +81,27 @@ pub enum LogLevel {
 impl LogLevel {
     fn to_lowlevel(&self) -> freenect_loglevel {
         match *self {
-            LogLevel::Fatal => freenect_loglevel::FREENECT_LOG_FATAL,
-            _ => freenect_loglevel::FREENECT_LOG_FATAL,
+            LogLevel::Fatal     => freenect_loglevel::FREENECT_LOG_FATAL,
+            LogLevel::Error     => freenect_loglevel::FREENECT_LOG_ERROR,
+            LogLevel::Warning   => freenect_loglevel::FREENECT_LOG_WARNING,
+            LogLevel::Notice    => freenect_loglevel::FREENECT_LOG_NOTICE,
+            LogLevel::Info      => freenect_loglevel::FREENECT_LOG_INFO,
+            LogLevel::Debug     => freenect_loglevel::FREENECT_LOG_DEBUG,
+            LogLevel::Spew      => freenect_loglevel::FREENECT_LOG_SPEW,
+            LogLevel::Flood     => freenect_loglevel::FREENECT_LOG_FLOOD,
         }
     }
 
     fn from_lowlevel(lvl: freenect_loglevel) -> LogLevel {
         match lvl {
-            freenect_loglevel::FREENECT_LOG_FATAL => LogLevel::Fatal,
-            _ => LogLevel::Fatal
+            freenect_loglevel::FREENECT_LOG_FATAL   => LogLevel::Fatal
+            freenect_loglevel::FREENECT_LOG_ERROR   => LogLevel::Error
+            freenect_loglevel::FREENECT_LOG_WARNING => LogLevel::Warning
+            freenect_loglevel::FREENECT_LOG_NOTICE  => LogLevel::Notice
+            freenect_loglevel::FREENECT_LOG_INFO    => LogLevel::Info
+            freenect_loglevel::FREENECT_LOG_DEBUG   => LogLevel::Debug
+            freenect_loglevel::FREENECT_LOG_SPEW    => LogLevel::Spew
+            freenect_loglevel::FREENECT_LOG_FLOOD   => LogLevel::Flood
         }
     }
 }
@@ -531,19 +543,19 @@ impl Device {
         }
     }
 
-    fn set_depth_callback(&mut self, cb: Option<Box<FnMut()>>) {
+    pub fn set_depth_callback(&mut self, cb: Option<Box<FnMut()>>) {
         self.ch.depth_cb = cb;
     }
 
-    fn set_video_callback(&mut self, cb: Option<Box<FnMut(&mut [u8], u32)>>) {
+    pub fn set_video_callback(&mut self, cb: Option<Box<FnMut(&mut [u8], u32)>>) {
         self.ch.video_cb = cb;
     }
 
-    fn set_depth_chunk_callback(&mut self, cb: Option<Box<FnMut()>>) {
+    pub fn set_depth_chunk_callback(&mut self, cb: Option<Box<FnMut()>>) {
         self.ch.depth_chunk_cb = cb;
     }
 
-    fn set_video_chunk_callback(&mut self, cb: Option<Box<FnMut()>>) {
+    pub fn set_video_chunk_callback(&mut self, cb: Option<Box<FnMut()>>) {
         self.ch.video_chunk_cb = cb;
     }
 
