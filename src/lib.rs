@@ -53,8 +53,14 @@ use libfreenect_sys::{
     freenect_get_current_video_mode,
     freenect_find_video_mode,
     freenect_set_video_mode,
+    freenect_get_depth_mode_count,
+	freenect_get_depth_mode,
+	freenect_get_current_depth_mode,
+	freenect_find_depth_mode,
+	freenect_set_depth_mode,
 };
 
+#[derive(Debug)]
 enum FreenectError {
     LibraryReturnCode(i32),
     NullPtr,
@@ -64,6 +70,7 @@ enum FreenectError {
 // Error type for the library
 pub type FreenectResult<T> = Result<T, FreenectError>;
 
+#[derive(Debug)]
 pub enum LogLevel {
 	Fatal,         // Log for crashing/non-recoverable errors
 	Error,         // Log for major errors
@@ -75,7 +82,6 @@ pub enum LogLevel {
 	Flood,         // Log EVERYTHING. May slow performance.
 }
 
-// FIXME: TBD remaining log levels
 impl LogLevel {
     fn to_lowlevel(&self) -> freenect_loglevel {
         match *self {
@@ -104,6 +110,7 @@ impl LogLevel {
     }
 }
 
+#[derive(Debug)]
 pub enum Resolution {
     Low,
     Medium,
@@ -129,6 +136,7 @@ impl Resolution {
     }
 }
 
+#[derive(Debug)]
 pub enum VideoFormat {
     Rgb,
     Bayer,
@@ -166,6 +174,7 @@ impl VideoFormat {
     }
 }
 
+#[derive(Debug)]
 pub enum DepthFormat {
     _11Bit,
     _10Bit,
@@ -200,11 +209,13 @@ impl DepthFormat {
     }
 }
 
+#[derive(Debug)]
 enum FrameModeFormat {
     Video(VideoFormat),
     Depth(DepthFormat),
 }
 
+#[derive(Debug)]
 pub struct FrameMode {
     reserved: uint32_t, // Need to track contents of underlying freenect struct
     resolution: Resolution,
@@ -284,10 +295,12 @@ bitflags! {
     }
 }
 
+#[derive(Debug)]
 pub struct DeviceAttributes {
     pub camera_serial: String,
 }
 
+#[derive(Debug)]
 struct InnerContext {
     ctx: *mut freenect_context,
 }
@@ -322,6 +335,7 @@ impl Drop for InnerContext {
     }
 }
 
+#[derive(Debug)]
 pub struct Context {
     ctx: Rc<InnerContext>,
 }
@@ -374,7 +388,7 @@ impl Context {
             unsafe { curr_item = (*curr_item).next };
         }
 
-        unsafe { freenect_free_device_attributes(self.ctx.ctx, lowlevel_list) };
+        unsafe { freenect_free_device_attributes(lowlevel_list) };
 
         Ok(device_list)
     }
@@ -439,6 +453,11 @@ impl InnerDevice {
         let lowlevel_video_mode = unsafe { freenect_get_current_video_mode(self.dev) };
         FrameMode::from_lowlevel_video(&lowlevel_video_mode)
     }
+
+    fn get_current_depth_mode(&mut self) -> FrameMode {
+        let lowlevel_depth_mode = unsafe { freenect_get_current_depth_mode(self.dev) };
+        FrameMode::from_lowlevel_depth(&lowlevel_depth_mode)
+    }
 }
 
 pub struct Device {
@@ -490,8 +509,15 @@ impl Device {
         unsafe {
             let ch = freenect_get_user(dev) as *mut ClosureHolder;
 
+            // Callback provides no information on frame buffer length. Retrieve the length by
+            // directly asking for the current mode information
+            let mode = (*ch).dev.borrow_mut().get_current_depth_mode();
+
+            let frame = slice::from_raw_parts_mut(depth as *mut u8, mode.bytes as usize);
+            let timestamp = timestamp as u32;
+
             match (*ch).depth_cb {
-                Some(ref mut cb) => cb(),
+                Some(ref mut cb) => cb(frame, timestamp),
                 None => return,
             };
         }
@@ -515,7 +541,7 @@ impl Device {
         }
     }
 
-    pub fn set_depth_callback(&mut self, cb: Option<Box<FnMut()>>) {
+    pub fn set_depth_callback(&mut self, cb: Option<Box<FnMut(&mut [u8], u32)>>) {
         self.ch.depth_cb = cb;
     }
 
@@ -580,7 +606,7 @@ impl Device {
 // C callback userdata  void pointer
 struct ClosureHolder {
     dev: Rc<RefCell<InnerDevice>>,
-    depth_cb: Option<Box<FnMut()>>,
+    depth_cb: Option<Box<FnMut(&mut [u8], u32)>>,
     video_cb: Option<Box<FnMut(&mut [u8], u32)>>,
 }
 
