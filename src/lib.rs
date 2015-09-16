@@ -6,9 +6,7 @@ use std::slice;
 
 extern crate libc;
 use libc::{
-    c_char,
     c_void,
-    c_int,
     uint32_t,
     int32_t,
 };
@@ -58,6 +56,8 @@ use libfreenect_sys::{
 	freenect_get_current_depth_mode,
 	freenect_find_depth_mode,
 	freenect_set_depth_mode,
+    freenect_depth_cb,
+    freenect_video_cb,
 };
 
 #[derive(Debug)]
@@ -250,15 +250,15 @@ impl FrameMode {
 
     fn to_lowlevel_video(&self) -> Option<freenect_frame_mode> {
         match self.format {
-            FrameModeFormat::Video(ref x) => Some(self.to_lowlevel()),
+            FrameModeFormat::Video(_) => Some(self.to_lowlevel()),
             FrameModeFormat::Depth(_) => None,
         }
     }
 
     fn to_lowlevel_depth(&self) -> Option<freenect_frame_mode> {
         match self.format {
-            FrameModeFormat::Depth(ref x) => Some(self.to_lowlevel()),
             FrameModeFormat::Video(_) => None,
+            FrameModeFormat::Depth(_) => Some(self.to_lowlevel()),
         }
     }
 
@@ -434,11 +434,12 @@ impl Context {
     }
 }
 
-struct InnerDevice {
+// Rust struct allowing methods to be attached to the underyling C struct
+struct CDevice {
     dev: *mut freenect_device,
 }
 
-impl Drop for InnerDevice {
+impl Drop for CDevice {
     fn drop(&mut self) {
         let ret = unsafe { freenect_close_device(self.dev) };
 
@@ -448,22 +449,93 @@ impl Drop for InnerDevice {
     }
 }
 
-impl InnerDevice {
+impl CDevice {
+    fn from_raw_device(dev: *mut freenect_device) -> CDevice {
+        CDevice{dev: dev}
+    }
+
+    fn set_user(&mut self, user: *mut c_void) {
+        unsafe { freenect_set_user(self.dev, user) };
+    }
+
+    fn get_user(&mut self) -> *mut c_void {
+        unsafe { freenect_get_user(self.dev) }
+    }
+
+    fn set_depth_callback(&mut self, cb: freenect_depth_cb) {
+        unsafe { freenect_set_depth_callback(self.dev, cb) };
+    }
+
+    fn set_video_callback(&mut self, cb: freenect_video_cb) {
+        unsafe { freenect_set_video_callback(self.dev, cb) };
+    }
+
+    fn start_depth(&mut self) -> FreenectResult<()> {
+        let ret = unsafe { freenect_start_depth(self.dev) };
+
+        if ret == 0 {
+            Err(FreenectError::LibraryReturnCode(ret))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn start_video(&mut self) -> FreenectResult<()> {
+        let ret = unsafe { freenect_start_video(self.dev) };
+
+        if ret == 0 {
+            Err(FreenectError::LibraryReturnCode(ret))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn stop_depth(&mut self) -> FreenectResult<()> {
+        let ret = unsafe { freenect_stop_depth(self.dev) };
+
+        if ret == 0 {
+            Err(FreenectError::LibraryReturnCode(ret))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn stop_video(&mut self) -> FreenectResult<()> {
+        let ret = unsafe { freenect_stop_video(self.dev) };
+
+        if ret == 0 {
+            Err(FreenectError::LibraryReturnCode(ret))
+        } else {
+            Ok(())
+        }
+    }
+
     fn get_current_video_mode(&mut self) -> FrameMode {
         let lowlevel_video_mode = unsafe { freenect_get_current_video_mode(self.dev) };
         FrameMode::from_lowlevel_video(&lowlevel_video_mode)
+    }
+
+    fn set_video_mode(&mut self, mode: FrameMode) -> FreenectResult<()> {
+        let lowlevel_video_mode = try!(mode.to_lowlevel_video().ok_or(FreenectError::FrameFormatMismatch));
+        unsafe { freenect_set_video_mode(self.dev, lowlevel_video_mode) };
+        Ok(())
     }
 
     fn get_current_depth_mode(&mut self) -> FrameMode {
         let lowlevel_depth_mode = unsafe { freenect_get_current_depth_mode(self.dev) };
         FrameMode::from_lowlevel_depth(&lowlevel_depth_mode)
     }
+
+    fn set_depth_mode(&mut self, mode: FrameMode) -> FreenectResult<()> {
+        let lowlevel_depth_mode = try!(mode.to_lowlevel_depth().ok_or(FreenectError::FrameFormatMismatch));
+        unsafe { freenect_set_depth_mode(self.dev, lowlevel_depth_mode) };
+        Ok(())
+    }
 }
 
 pub struct Device {
     ctx: Rc<InnerContext>, // Handle to prevent underlying context being free'd before device
-    dev: Rc<RefCell<InnerDevice>>,
-    ch: Box<ClosureHolder>,
+    dev: Rc<RefCell<CDevice>>,
     pub motor:  Option<MotorSubdevice>,
     pub camera: Option<CameraSubdevice>,
     pub audio:  Option<AudioSubdevice>,
@@ -471,38 +543,100 @@ pub struct Device {
 
 impl Device {
     fn from_raw_device(ctx: Rc<InnerContext>, dev: *mut freenect_device, subdevs: DeviceFlags) -> Device {
-        let mut inner_dev = Rc::new(RefCell::new(InnerDevice{dev: dev}));
+        let mut inner_dev = Rc::new(RefCell::new(CDevice::from_raw_device(dev)));
 
-        let mut dev = Device {
+        Device {
             ctx: ctx,
             dev: inner_dev.clone(),
-            ch: Box::new(ClosureHolder {
-                dev: inner_dev.clone(),
-                depth_cb: None,
-                video_cb: None,
-            }),
-            motor:  if subdevs.contains(DEVICE_MOTOR)  { Some(MotorSubdevice{dev: inner_dev.clone()})  } else { None },
-            camera: if subdevs.contains(DEVICE_CAMERA) {
-                        Some(CameraSubdevice{
-                            dev: inner_dev.clone(),
-                            })
-                    } else {
-                        None
-                    },
-            audio:  if subdevs.contains(DEVICE_AUDIO)  { Some(AudioSubdevice{dev: inner_dev.clone()})  } else { None },
-        };
+            motor:  if subdevs.contains(DEVICE_MOTOR)  { Some(MotorSubdevice::new(inner_dev.clone()))  } else { None },
+            camera: if subdevs.contains(DEVICE_CAMERA) { Some(CameraSubdevice::new(inner_dev.clone())) } else { None },
+            audio:  if subdevs.contains(DEVICE_AUDIO)  { Some(AudioSubdevice::new(inner_dev.clone()))  } else { None },
+        }
+    }
+}
+
+pub struct MotorSubdevice {
+    dev: Rc<RefCell<CDevice>>,
+}
+
+impl MotorSubdevice {
+    fn new(dev: Rc<RefCell<CDevice>>) -> MotorSubdevice {
+        MotorSubdevice{dev: dev}
+    }
+}
+
+// Exists so it can be boxed (therefore fixing its memory address) and have its address handed as a
+// C callback userdata void pointer
+struct ClosureHolder {
+    dev: Rc<RefCell<CDevice>>,
+    depth_cb: Option<Box<FnMut(&mut [u8], u32) + Send + 'static>>,
+    video_cb: Option<Box<FnMut(&mut [u8], u32) + Send + 'static>>,
+}
+
+impl ClosureHolder {
+    fn new(dev: Rc<RefCell<CDevice>>) -> ClosureHolder {
+        ClosureHolder{dev: dev, depth_cb: None, video_cb: None}
+    }
+}
+
+pub struct CameraSubdevice {
+    dev: Rc<RefCell<CDevice>>,
+    ch: Box<ClosureHolder>,
+}
+
+impl CameraSubdevice {
+    fn new(dev: Rc<RefCell<CDevice>>) -> CameraSubdevice {
+        let mut cam_sub = CameraSubdevice{ dev: dev.clone(), ch: Box::new(ClosureHolder::new(dev.clone()))};
 
         // Register all callbacks. We'll let Rust code decide if a user callback should be called.
         unsafe {
-            let mut inner_dev = dev.dev.borrow_mut();
-
-            freenect_set_user(inner_dev.dev, std::mem::transmute(&mut *dev.ch));
-
-            freenect_set_depth_callback(inner_dev.dev, Device::depth_cb_trampoline);
-            freenect_set_video_callback(inner_dev.dev, Device::video_cb_trampoline);
+            let mut cdev = dev.borrow_mut();
+            cdev.set_user(std::mem::transmute(&mut *cam_sub.ch));
+            cdev.set_depth_callback(CameraSubdevice::depth_cb_trampoline);
+            cdev.set_video_callback(CameraSubdevice::video_cb_trampoline);
         }
 
-        return dev;
+        return cam_sub;
+    }
+
+    pub fn set_depth_callback(&mut self, cb: Option<Box<FnMut(&mut [u8], u32) + Send + 'static>>) {
+        self.ch.depth_cb = cb;
+    }
+
+    pub fn set_video_callback(&mut self, cb: Option<Box<FnMut(&mut [u8], u32) + Send + 'static>>) {
+        self.ch.video_cb = cb;
+    }
+
+    pub fn start_depth(&mut self) -> FreenectResult<()> {
+        self.dev.borrow_mut().start_depth()
+    }
+
+    pub fn start_video(&mut self) -> FreenectResult<()> {
+        self.dev.borrow_mut().start_video()
+    }
+
+    pub fn stop_depth(&mut self) -> FreenectResult<()> {
+        self.dev.borrow_mut().stop_depth()
+    }
+
+    pub fn stop_video(&mut self) -> FreenectResult<()> {
+        self.dev.borrow_mut().stop_video()
+    }
+
+    pub fn get_current_video_mode(&mut self) -> FrameMode {
+        self.dev.borrow_mut().get_current_video_mode()
+    }
+
+    pub fn set_video_mode(&mut self, mode: FrameMode) -> FreenectResult<()> {
+        self.dev.borrow_mut().set_video_mode(mode)
+    }
+
+    pub fn get_current_depth_mode(&mut self) -> FrameMode {
+        self.dev.borrow_mut().get_current_depth_mode()
+    }
+
+    pub fn set_depth_mode(&mut self, mode: FrameMode) -> FreenectResult<()> {
+        self.dev.borrow_mut().set_depth_mode(mode)
     }
 
     extern "C" fn depth_cb_trampoline(dev: *mut freenect_device, depth: *mut c_void, timestamp: uint32_t) {
@@ -540,86 +674,16 @@ impl Device {
             };
         }
     }
-
-    pub fn set_depth_callback(&mut self, cb: Option<Box<FnMut(&mut [u8], u32)>>) {
-        self.ch.depth_cb = cb;
-    }
-
-    pub fn set_video_callback(&mut self, cb: Option<Box<FnMut(&mut [u8], u32)>>) {
-        self.ch.video_cb = cb;
-    }
-
-    pub fn start_depth(&mut self) -> FreenectResult<()> {
-        let ret = unsafe { freenect_start_depth(self.dev.borrow_mut().dev)};
-
-        if ret == 0 {
-            Ok(())
-        } else {
-            Err(FreenectError::LibraryReturnCode(ret))
-        }
-    }
-
-    pub fn start_video(&mut self) -> FreenectResult<()> {
-        let ret = unsafe { freenect_start_video(self.dev.borrow_mut().dev)};
-
-        if ret == 0 {
-            Ok(())
-        } else {
-            Err(FreenectError::LibraryReturnCode(ret))
-        }
-    }
-
-    pub fn stop_depth(&mut self) -> FreenectResult<()> {
-        let ret = unsafe { freenect_stop_depth(self.dev.borrow_mut().dev)};
-
-        if ret == 0 {
-            Ok(())
-        } else {
-            Err(FreenectError::LibraryReturnCode(ret))
-        }
-    }
-
-    pub fn stop_video(&mut self) -> FreenectResult<()> {
-        let ret = unsafe { freenect_stop_video(self.dev.borrow_mut().dev)};
-
-        if ret == 0 {
-            Ok(())
-        } else {
-            Err(FreenectError::LibraryReturnCode(ret))
-        }
-    }
-
-    pub fn get_current_video_mode(&mut self) -> FrameMode {
-        self.dev.borrow_mut().get_current_video_mode()
-    }
-
-    pub fn set_video_mode(&mut self, mode: FrameMode) -> FreenectResult<()> {
-        let mut lowlevel_video_mode = try!(mode.to_lowlevel_video().ok_or(FreenectError::FrameFormatMismatch));
-        unsafe { freenect_set_video_mode(self.dev.borrow_mut().dev, lowlevel_video_mode) };
-        Ok(())
-    }
-
-    // pub fn freenect_get_video_mode(mode_num: c_int) -> freenect_frame_mode;
-}
-
-// Exists so it can be boxed (therefore fixing its memory address) and have its address handed as a
-// C callback userdata  void pointer
-struct ClosureHolder {
-    dev: Rc<RefCell<InnerDevice>>,
-    depth_cb: Option<Box<FnMut(&mut [u8], u32)>>,
-    video_cb: Option<Box<FnMut(&mut [u8], u32)>>,
-}
-
-pub struct MotorSubdevice {
-    dev: Rc<RefCell<InnerDevice>>,
-}
-
-pub struct CameraSubdevice {
-    dev: Rc<RefCell<InnerDevice>>,
 }
 
 pub struct AudioSubdevice {
-    dev: Rc<RefCell<InnerDevice>>,
+    dev: Rc<RefCell<CDevice>>,
+}
+
+impl AudioSubdevice {
+    fn new(dev: Rc<RefCell<CDevice>>) -> AudioSubdevice {
+        AudioSubdevice{dev: dev}
+    }
 }
 
 pub fn supported_subdevices() -> DeviceFlags {
