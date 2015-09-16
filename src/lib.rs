@@ -15,50 +15,7 @@ use libc::{
 extern crate bitflags;
 
 extern crate libfreenect_sys;
-use libfreenect_sys::{
-    freenect_context,
-    freenect_init,
-    freenect_shutdown,
-    freenect_loglevel,
-    freenect_video_format,
-    freenect_depth_format,
-    freenect_resolution,
-    freenect_frame_mode,
-    freenect_set_log_level,
-    freenect_process_events,
-    freenect_num_devices,
-    freenect_device_flags,
-    freenect_device_attributes,
-    freenect_list_device_attributes,
-    freenect_free_device_attributes,
-    freenect_supported_subdevices,
-    freenect_select_subdevices,
-    freenect_enabled_subdevices,
-    freenect_device,
-    freenect_open_device,
-    freenect_open_device_by_camera_serial,
-    freenect_close_device,
-    freenect_set_depth_callback,
-    freenect_set_video_callback,
-    freenect_get_user,
-    freenect_set_user,
-    freenect_start_depth,
-    freenect_start_video,
-    freenect_stop_depth,
-    freenect_stop_video,
-    freenect_get_video_mode_count,
-    freenect_get_video_mode,
-    freenect_get_current_video_mode,
-    freenect_find_video_mode,
-    freenect_set_video_mode,
-    freenect_get_depth_mode_count,
-	freenect_get_depth_mode,
-	freenect_get_current_depth_mode,
-	freenect_find_depth_mode,
-	freenect_set_depth_mode,
-    freenect_depth_cb,
-    freenect_video_cb,
-};
+use libfreenect_sys as ft;
 
 #[derive(Debug)]
 enum FreenectError {
@@ -83,29 +40,29 @@ pub enum LogLevel {
 }
 
 impl LogLevel {
-    fn to_lowlevel(&self) -> freenect_loglevel {
+    fn to_lowlevel(&self) -> ft::freenect_loglevel {
         match *self {
-            LogLevel::Fatal     => freenect_loglevel::FREENECT_LOG_FATAL,
-            LogLevel::Error     => freenect_loglevel::FREENECT_LOG_ERROR,
-            LogLevel::Warning   => freenect_loglevel::FREENECT_LOG_WARNING,
-            LogLevel::Notice    => freenect_loglevel::FREENECT_LOG_NOTICE,
-            LogLevel::Info      => freenect_loglevel::FREENECT_LOG_INFO,
-            LogLevel::Debug     => freenect_loglevel::FREENECT_LOG_DEBUG,
-            LogLevel::Spew      => freenect_loglevel::FREENECT_LOG_SPEW,
-            LogLevel::Flood     => freenect_loglevel::FREENECT_LOG_FLOOD,
+            LogLevel::Fatal     => ft::freenect_loglevel::FREENECT_LOG_FATAL,
+            LogLevel::Error     => ft::freenect_loglevel::FREENECT_LOG_ERROR,
+            LogLevel::Warning   => ft::freenect_loglevel::FREENECT_LOG_WARNING,
+            LogLevel::Notice    => ft::freenect_loglevel::FREENECT_LOG_NOTICE,
+            LogLevel::Info      => ft::freenect_loglevel::FREENECT_LOG_INFO,
+            LogLevel::Debug     => ft::freenect_loglevel::FREENECT_LOG_DEBUG,
+            LogLevel::Spew      => ft::freenect_loglevel::FREENECT_LOG_SPEW,
+            LogLevel::Flood     => ft::freenect_loglevel::FREENECT_LOG_FLOOD,
         }
     }
 
-    fn from_lowlevel(lvl: freenect_loglevel) -> LogLevel {
+    fn from_lowlevel(lvl: ft::freenect_loglevel) -> LogLevel {
         match lvl {
-            freenect_loglevel::FREENECT_LOG_FATAL   => LogLevel::Fatal,
-            freenect_loglevel::FREENECT_LOG_ERROR   => LogLevel::Error,
-            freenect_loglevel::FREENECT_LOG_WARNING => LogLevel::Warning,
-            freenect_loglevel::FREENECT_LOG_NOTICE  => LogLevel::Notice,
-            freenect_loglevel::FREENECT_LOG_INFO    => LogLevel::Info,
-            freenect_loglevel::FREENECT_LOG_DEBUG   => LogLevel::Debug,
-            freenect_loglevel::FREENECT_LOG_SPEW    => LogLevel::Spew,
-            freenect_loglevel::FREENECT_LOG_FLOOD   => LogLevel::Flood,
+            ft::freenect_loglevel::FREENECT_LOG_FATAL   => LogLevel::Fatal,
+            ft::freenect_loglevel::FREENECT_LOG_ERROR   => LogLevel::Error,
+            ft::freenect_loglevel::FREENECT_LOG_WARNING => LogLevel::Warning,
+            ft::freenect_loglevel::FREENECT_LOG_NOTICE  => LogLevel::Notice,
+            ft::freenect_loglevel::FREENECT_LOG_INFO    => LogLevel::Info,
+            ft::freenect_loglevel::FREENECT_LOG_DEBUG   => LogLevel::Debug,
+            ft::freenect_loglevel::FREENECT_LOG_SPEW    => LogLevel::Spew,
+            ft::freenect_loglevel::FREENECT_LOG_FLOOD   => LogLevel::Flood,
         }
     }
 }
@@ -118,19 +75,19 @@ pub enum Resolution {
 }
 
 impl Resolution {
-    fn to_lowlevel(&self) -> freenect_resolution {
+    fn to_lowlevel(&self) -> ft::freenect_resolution {
         match *self {
-            Resolution::Low     => freenect_resolution::FREENECT_RESOLUTION_LOW,
-            Resolution::Medium  => freenect_resolution::FREENECT_RESOLUTION_MEDIUM,
-            Resolution::High    => freenect_resolution::FREENECT_RESOLUTION_HIGH,
+            Resolution::Low     => ft::freenect_resolution::FREENECT_RESOLUTION_LOW,
+            Resolution::Medium  => ft::freenect_resolution::FREENECT_RESOLUTION_MEDIUM,
+            Resolution::High    => ft::freenect_resolution::FREENECT_RESOLUTION_HIGH,
         }
     }
 
-    fn from_lowlevel(res: &freenect_resolution) -> Resolution {
+    fn from_lowlevel(res: &ft::freenect_resolution) -> Resolution {
         match *res {
-            freenect_resolution::FREENECT_RESOLUTION_LOW    => Resolution::Low,
-            freenect_resolution::FREENECT_RESOLUTION_MEDIUM => Resolution::Medium,
-            freenect_resolution::FREENECT_RESOLUTION_HIGH   => Resolution::High,
+            ft::freenect_resolution::FREENECT_RESOLUTION_LOW    => Resolution::Low,
+            ft::freenect_resolution::FREENECT_RESOLUTION_MEDIUM => Resolution::Medium,
+            ft::freenect_resolution::FREENECT_RESOLUTION_HIGH   => Resolution::High,
             _ => panic!("Unknown freenect_resolution enum")
         }
     }
@@ -148,15 +105,15 @@ pub enum VideoFormat {
 }
 
 impl VideoFormat {
-    fn to_lowlevel(&self) -> freenect_video_format {
+    fn to_lowlevel(&self) -> ft::freenect_video_format {
         match *self {
-            VideoFormat::Rgb            => freenect_video_format::FREENECT_VIDEO_RGB,
-            VideoFormat::Bayer          => freenect_video_format::FREENECT_VIDEO_BAYER,
-            VideoFormat::Ir8Bit         => freenect_video_format::FREENECT_VIDEO_IR_8BIT,
-            VideoFormat::Ir10Bit        => freenect_video_format::FREENECT_VIDEO_IR_10BIT,
-            VideoFormat::Ir10BitPacked  => freenect_video_format::FREENECT_VIDEO_IR_10BIT_PACKED,
-            VideoFormat::YuvRgb         => freenect_video_format::FREENECT_VIDEO_YUV_RGB,
-            VideoFormat::YuvRaw         => freenect_video_format::FREENECT_VIDEO_YUV_RAW,
+            VideoFormat::Rgb            => ft::freenect_video_format::FREENECT_VIDEO_RGB,
+            VideoFormat::Bayer          => ft::freenect_video_format::FREENECT_VIDEO_BAYER,
+            VideoFormat::Ir8Bit         => ft::freenect_video_format::FREENECT_VIDEO_IR_8BIT,
+            VideoFormat::Ir10Bit        => ft::freenect_video_format::FREENECT_VIDEO_IR_10BIT,
+            VideoFormat::Ir10BitPacked  => ft::freenect_video_format::FREENECT_VIDEO_IR_10BIT_PACKED,
+            VideoFormat::YuvRgb         => ft::freenect_video_format::FREENECT_VIDEO_YUV_RGB,
+            VideoFormat::YuvRaw         => ft::freenect_video_format::FREENECT_VIDEO_YUV_RAW,
         }
     }
 
@@ -185,14 +142,14 @@ pub enum DepthFormat {
 }
 
 impl DepthFormat {
-    fn to_lowlevel(&self) -> freenect_depth_format {
+    fn to_lowlevel(&self) -> ft::freenect_depth_format {
         match *self {
-            DepthFormat::_11Bit         => freenect_depth_format::FREENECT_DEPTH_11BIT,
-            DepthFormat::_10Bit         => freenect_depth_format::FREENECT_DEPTH_10BIT,
-            DepthFormat::_11BitPacked   => freenect_depth_format::FREENECT_DEPTH_11BIT_PACKED,
-            DepthFormat::_10BitPacked   => freenect_depth_format::FREENECT_DEPTH_10BIT_PACKED,
-            DepthFormat::Registered     => freenect_depth_format::FREENECT_DEPTH_REGISTERED,
-            DepthFormat::Mm             => freenect_depth_format::FREENECT_DEPTH_MM,
+            DepthFormat::_11Bit         => ft::freenect_depth_format::FREENECT_DEPTH_11BIT,
+            DepthFormat::_10Bit         => ft::freenect_depth_format::FREENECT_DEPTH_10BIT,
+            DepthFormat::_11BitPacked   => ft::freenect_depth_format::FREENECT_DEPTH_11BIT_PACKED,
+            DepthFormat::_10BitPacked   => ft::freenect_depth_format::FREENECT_DEPTH_10BIT_PACKED,
+            DepthFormat::Registered     => ft::freenect_depth_format::FREENECT_DEPTH_REGISTERED,
+            DepthFormat::Mm             => ft::freenect_depth_format::FREENECT_DEPTH_MM,
         }
     }
 
@@ -230,8 +187,8 @@ pub struct FrameMode {
 }
 
 impl FrameMode {
-    fn to_lowlevel(&self) -> freenect_frame_mode {
-        freenect_frame_mode {
+    fn to_lowlevel(&self) -> ft::freenect_frame_mode {
+        ft::freenect_frame_mode {
             reserved: self.reserved,
             resolution: self.resolution.to_lowlevel(),
             dummy: match self.format {
@@ -248,21 +205,21 @@ impl FrameMode {
         }
     }
 
-    fn to_lowlevel_video(&self) -> Option<freenect_frame_mode> {
+    fn to_lowlevel_video(&self) -> Option<ft::freenect_frame_mode> {
         match self.format {
             FrameModeFormat::Video(_) => Some(self.to_lowlevel()),
             FrameModeFormat::Depth(_) => None,
         }
     }
 
-    fn to_lowlevel_depth(&self) -> Option<freenect_frame_mode> {
+    fn to_lowlevel_depth(&self) -> Option<ft::freenect_frame_mode> {
         match self.format {
             FrameModeFormat::Video(_) => None,
             FrameModeFormat::Depth(_) => Some(self.to_lowlevel()),
         }
     }
 
-    fn from_lowlevel(mode: &freenect_frame_mode, fmt: FrameModeFormat) -> FrameMode {
+    fn from_lowlevel(mode: &ft::freenect_frame_mode, fmt: FrameModeFormat) -> FrameMode {
         FrameMode {
             reserved: mode.reserved,
             resolution: Resolution::from_lowlevel(&mode.resolution),
@@ -277,11 +234,11 @@ impl FrameMode {
         }
     }
 
-    fn from_lowlevel_video(mode: &freenect_frame_mode) -> FrameMode {
+    fn from_lowlevel_video(mode: &ft::freenect_frame_mode) -> FrameMode {
         FrameMode::from_lowlevel(mode, FrameModeFormat::Video(VideoFormat::from_lowlevel_int(mode.dummy)))
     }
 
-    fn from_lowlevel_depth(mode: &freenect_frame_mode) -> FrameMode {
+    fn from_lowlevel_depth(mode: &ft::freenect_frame_mode) -> FrameMode {
         FrameMode::from_lowlevel(mode, FrameModeFormat::Depth(DepthFormat::from_lowlevel_int(mode.dummy)))
     }
 }
@@ -289,9 +246,9 @@ impl FrameMode {
 
 bitflags! {
     flags DeviceFlags: u32 {
-        const DEVICE_MOTOR  = freenect_device_flags::FREENECT_DEVICE_MOTOR  as u32,
-        const DEVICE_CAMERA = freenect_device_flags::FREENECT_DEVICE_CAMERA as u32,
-        const DEVICE_AUDIO  = freenect_device_flags::FREENECT_DEVICE_AUDIO  as u32,
+        const DEVICE_MOTOR  = ft::freenect_device_flags::FREENECT_DEVICE_MOTOR  as u32,
+        const DEVICE_CAMERA = ft::freenect_device_flags::FREENECT_DEVICE_CAMERA as u32,
+        const DEVICE_AUDIO  = ft::freenect_device_flags::FREENECT_DEVICE_AUDIO  as u32,
     }
 }
 
@@ -302,7 +259,7 @@ pub struct DeviceAttributes {
 
 #[derive(Debug)]
 struct InnerContext {
-    ctx: *mut freenect_context,
+    ctx: *mut ft::freenect_context,
 }
 
 // InnerContext separated from main Context so that 'Device' handles can hold a reference to the
@@ -312,7 +269,7 @@ impl InnerContext {
     fn new() -> FreenectResult<InnerContext> {
         let mut ctx = InnerContext{ctx: ptr::null_mut()};
 
-        match unsafe { freenect_init(&mut ctx.ctx, ptr::null_mut()) } {
+        match unsafe { ft::freenect_init(&mut ctx.ctx, ptr::null_mut()) } {
             0 => {
                 if ctx.ctx != ptr::null_mut() {
                     Ok(ctx)
@@ -327,7 +284,7 @@ impl InnerContext {
 
 impl Drop for InnerContext {
     fn drop(&mut self) {
-        let ret = unsafe { freenect_shutdown(self.ctx) };
+        let ret = unsafe { ft::freenect_shutdown(self.ctx) };
 
         if ret < 0 {
             panic!(ret)
@@ -348,11 +305,11 @@ impl Context {
     }
 
     pub fn set_log_level(&mut self, level: LogLevel) {
-        unsafe { freenect_set_log_level(self.ctx.ctx, level.to_lowlevel()); }
+        unsafe { ft::freenect_set_log_level(self.ctx.ctx, level.to_lowlevel()); }
     }
 
     pub fn process_events(&mut self) -> FreenectResult<()> {
-        match unsafe { freenect_process_events(self.ctx.ctx) } {
+        match unsafe { ft::freenect_process_events(self.ctx.ctx) } {
             0 => Ok(()),
             x => Err(FreenectError::LibraryReturnCode(x)),
         }
@@ -361,7 +318,7 @@ impl Context {
     // FIXME: Implement process_events with timeout
 
     pub fn num_devices(&mut self) -> FreenectResult<u32> {
-        let ret = unsafe { freenect_num_devices(self.ctx.ctx) };
+        let ret = unsafe { ft::freenect_num_devices(self.ctx.ctx) };
         if ret < 0 {
             Err(FreenectError::LibraryReturnCode(ret))
         } else {
@@ -370,9 +327,9 @@ impl Context {
     }
 
     pub fn list_device_attributes(&mut self) -> FreenectResult<Vec<DeviceAttributes>> {
-        let mut lowlevel_list: *mut freenect_device_attributes = ptr::null_mut();
+        let mut lowlevel_list: *mut ft::freenect_device_attributes = ptr::null_mut();
 
-        let ret = unsafe { freenect_list_device_attributes(self.ctx.ctx, &mut lowlevel_list) };
+        let ret = unsafe { ft::freenect_list_device_attributes(self.ctx.ctx, &mut lowlevel_list) };
         if ret < 0 {
             return Err(FreenectError::LibraryReturnCode(ret));
         }
@@ -388,29 +345,29 @@ impl Context {
             unsafe { curr_item = (*curr_item).next };
         }
 
-        unsafe { freenect_free_device_attributes(lowlevel_list) };
+        unsafe { ft::freenect_free_device_attributes(lowlevel_list) };
 
         Ok(device_list)
     }
 
     // Internal use only
     fn select_subdevices(&mut self, subdevs: DeviceFlags) {
-        unsafe { freenect_select_subdevices(self.ctx.ctx, subdevs.bits) };
+        unsafe { ft::freenect_select_subdevices(self.ctx.ctx, subdevs.bits) };
     }
 
     // Internal use only
     fn enabled_subdevices(&mut self) -> DeviceFlags {
-        let ret = unsafe { freenect_enabled_subdevices(self.ctx.ctx) };
+        let ret = unsafe { ft::freenect_enabled_subdevices(self.ctx.ctx) };
 
         return DeviceFlags::from_bits(ret as u32).unwrap();
     }
 
     pub fn open_device(&mut self, index: u32, subdevs: DeviceFlags) -> FreenectResult<Device> {
-        let mut dev: *mut freenect_device = ptr::null_mut();
+        let mut dev: *mut ft::freenect_device = ptr::null_mut();
 
         self.select_subdevices(subdevs);
 
-        let ret = unsafe { freenect_open_device(self.ctx.ctx, &mut dev, index as i32) };
+        let ret = unsafe { ft::freenect_open_device(self.ctx.ctx, &mut dev, index as i32) };
         if ret < 0 {
             return Err(FreenectError::LibraryReturnCode(ret))
         }
@@ -419,13 +376,13 @@ impl Context {
     }
 
     pub fn open_device_by_camera_serial(&mut self, serial: &str, subdevs: DeviceFlags) -> FreenectResult<Device> {
-        let mut dev: *mut freenect_device = ptr::null_mut();
+        let mut dev: *mut ft::freenect_device = ptr::null_mut();
 
         let serial_cstring = ffi::CString::new(serial).unwrap();
 
         self.select_subdevices(subdevs);
 
-        let ret = unsafe { freenect_open_device_by_camera_serial(self.ctx.ctx, &mut dev, serial_cstring.as_ptr()) };
+        let ret = unsafe { ft::freenect_open_device_by_camera_serial(self.ctx.ctx, &mut dev, serial_cstring.as_ptr()) };
         if ret < 0 {
             return Err(FreenectError::LibraryReturnCode(ret))
         }
@@ -436,12 +393,12 @@ impl Context {
 
 // Rust struct allowing methods to be attached to the underyling C struct
 struct CDevice {
-    dev: *mut freenect_device,
+    dev: *mut ft::freenect_device,
 }
 
 impl Drop for CDevice {
     fn drop(&mut self) {
-        let ret = unsafe { freenect_close_device(self.dev) };
+        let ret = unsafe { ft::freenect_close_device(self.dev) };
 
         if ret < 0 {
             panic!(ret)
@@ -450,28 +407,28 @@ impl Drop for CDevice {
 }
 
 impl CDevice {
-    fn from_raw_device(dev: *mut freenect_device) -> CDevice {
+    fn from_raw_device(dev: *mut ft::freenect_device) -> CDevice {
         CDevice{dev: dev}
     }
 
     fn set_user(&mut self, user: *mut c_void) {
-        unsafe { freenect_set_user(self.dev, user) };
+        unsafe { ft::freenect_set_user(self.dev, user) };
     }
 
     fn get_user(&mut self) -> *mut c_void {
-        unsafe { freenect_get_user(self.dev) }
+        unsafe { ft::freenect_get_user(self.dev) }
     }
 
-    fn set_depth_callback(&mut self, cb: freenect_depth_cb) {
-        unsafe { freenect_set_depth_callback(self.dev, cb) };
+    fn set_depth_callback(&mut self, cb: ft::freenect_depth_cb) {
+        unsafe { ft::freenect_set_depth_callback(self.dev, cb) };
     }
 
-    fn set_video_callback(&mut self, cb: freenect_video_cb) {
-        unsafe { freenect_set_video_callback(self.dev, cb) };
+    fn set_video_callback(&mut self, cb: ft::freenect_video_cb) {
+        unsafe { ft::freenect_set_video_callback(self.dev, cb) };
     }
 
     fn start_depth(&mut self) -> FreenectResult<()> {
-        let ret = unsafe { freenect_start_depth(self.dev) };
+        let ret = unsafe { ft::freenect_start_depth(self.dev) };
 
         if ret == 0 {
             Err(FreenectError::LibraryReturnCode(ret))
@@ -481,7 +438,7 @@ impl CDevice {
     }
 
     fn start_video(&mut self) -> FreenectResult<()> {
-        let ret = unsafe { freenect_start_video(self.dev) };
+        let ret = unsafe { ft::freenect_start_video(self.dev) };
 
         if ret == 0 {
             Err(FreenectError::LibraryReturnCode(ret))
@@ -491,7 +448,7 @@ impl CDevice {
     }
 
     fn stop_depth(&mut self) -> FreenectResult<()> {
-        let ret = unsafe { freenect_stop_depth(self.dev) };
+        let ret = unsafe { ft::freenect_stop_depth(self.dev) };
 
         if ret == 0 {
             Err(FreenectError::LibraryReturnCode(ret))
@@ -501,7 +458,7 @@ impl CDevice {
     }
 
     fn stop_video(&mut self) -> FreenectResult<()> {
-        let ret = unsafe { freenect_stop_video(self.dev) };
+        let ret = unsafe { ft::freenect_stop_video(self.dev) };
 
         if ret == 0 {
             Err(FreenectError::LibraryReturnCode(ret))
@@ -511,24 +468,24 @@ impl CDevice {
     }
 
     fn get_current_video_mode(&mut self) -> FrameMode {
-        let lowlevel_video_mode = unsafe { freenect_get_current_video_mode(self.dev) };
+        let lowlevel_video_mode = unsafe { ft::freenect_get_current_video_mode(self.dev) };
         FrameMode::from_lowlevel_video(&lowlevel_video_mode)
     }
 
     fn set_video_mode(&mut self, mode: FrameMode) -> FreenectResult<()> {
         let lowlevel_video_mode = try!(mode.to_lowlevel_video().ok_or(FreenectError::FrameFormatMismatch));
-        unsafe { freenect_set_video_mode(self.dev, lowlevel_video_mode) };
+        unsafe { ft::freenect_set_video_mode(self.dev, lowlevel_video_mode) };
         Ok(())
     }
 
     fn get_current_depth_mode(&mut self) -> FrameMode {
-        let lowlevel_depth_mode = unsafe { freenect_get_current_depth_mode(self.dev) };
+        let lowlevel_depth_mode = unsafe { ft::freenect_get_current_depth_mode(self.dev) };
         FrameMode::from_lowlevel_depth(&lowlevel_depth_mode)
     }
 
     fn set_depth_mode(&mut self, mode: FrameMode) -> FreenectResult<()> {
         let lowlevel_depth_mode = try!(mode.to_lowlevel_depth().ok_or(FreenectError::FrameFormatMismatch));
-        unsafe { freenect_set_depth_mode(self.dev, lowlevel_depth_mode) };
+        unsafe { ft::freenect_set_depth_mode(self.dev, lowlevel_depth_mode) };
         Ok(())
     }
 }
@@ -542,7 +499,7 @@ pub struct Device {
 }
 
 impl Device {
-    fn from_raw_device(ctx: Rc<InnerContext>, dev: *mut freenect_device, subdevs: DeviceFlags) -> Device {
+    fn from_raw_device(ctx: Rc<InnerContext>, dev: *mut ft::freenect_device, subdevs: DeviceFlags) -> Device {
         let mut inner_dev = Rc::new(RefCell::new(CDevice::from_raw_device(dev)));
 
         Device {
@@ -639,9 +596,9 @@ impl CameraSubdevice {
         self.dev.borrow_mut().set_depth_mode(mode)
     }
 
-    extern "C" fn depth_cb_trampoline(dev: *mut freenect_device, depth: *mut c_void, timestamp: uint32_t) {
+    extern "C" fn depth_cb_trampoline(dev: *mut ft::freenect_device, depth: *mut c_void, timestamp: uint32_t) {
         unsafe {
-            let ch = freenect_get_user(dev) as *mut ClosureHolder;
+            let ch = ft::freenect_get_user(dev) as *mut ClosureHolder;
 
             // Callback provides no information on frame buffer length. Retrieve the length by
             // directly asking for the current mode information
@@ -657,9 +614,9 @@ impl CameraSubdevice {
         }
     }
 
-    extern "C" fn video_cb_trampoline(dev: *mut freenect_device, video: *mut c_void, timestamp: uint32_t) {
+    extern "C" fn video_cb_trampoline(dev: *mut ft::freenect_device, video: *mut c_void, timestamp: uint32_t) {
         unsafe {
-            let ch = freenect_get_user(dev) as *mut ClosureHolder;
+            let ch = ft::freenect_get_user(dev) as *mut ClosureHolder;
 
             // Callback provides no information on frame buffer length. Retrieve the length by
             // directly asking for the current mode information
@@ -687,6 +644,6 @@ impl AudioSubdevice {
 }
 
 pub fn supported_subdevices() -> DeviceFlags {
-    let bits = unsafe { freenect_supported_subdevices() as u32 };
+    let bits = unsafe { ft::freenect_supported_subdevices() as u32 };
     return DeviceFlags::from_bits(bits).unwrap();
 }
