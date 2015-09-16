@@ -243,6 +243,42 @@ impl FrameMode {
     }
 }
 
+pub enum TiltStatus {
+    Stopped,
+    Limit,
+    Moving,
+}
+
+impl TiltStatus {
+    fn from_lowlevel(status: &ft::freenect_tilt_status_code) -> TiltStatus {
+        match *status {
+            ft::freenect_tilt_status_code::TILT_STATUS_STOPPED => TiltStatus::Stopped,
+            ft::freenect_tilt_status_code::TILT_STATUS_LIMIT   => TiltStatus::Limit,
+            ft::freenect_tilt_status_code::TILT_STATUS_MOVING  => TiltStatus::Moving,
+        }
+    }
+}
+
+pub struct RawTiltState {
+    accelerometer_x: i16,
+    accelerometer_y: i16,
+    accelerometer_z: i16,
+    tilt_angle: i8,
+    tilt_status: TiltStatus,
+}
+
+impl RawTiltState {
+    fn from_lowlevel(state: *const ft::freenect_raw_tilt_state) -> RawTiltState {
+        let state = unsafe { &*state };
+        RawTiltState{
+            accelerometer_x: state.accelerometer_x,
+            accelerometer_y: state.accelerometer_y,
+            accelerometer_z: state.accelerometer_z,
+            tilt_angle: state.tilt_angle,
+            tilt_status: TiltStatus::from_lowlevel(&state.tilt_status),
+        }
+    }
+}
 
 bitflags! {
     flags DeviceFlags: u32 {
@@ -486,6 +522,20 @@ impl CDevice {
         unsafe { ft::freenect_set_depth_mode(self.dev, lowlevel_depth_mode) };
         Ok(())
     }
+
+    fn update_tilt_state(&mut self) -> FreenectResult<()> {
+        let ret = unsafe { ft::freenect_update_tilt_state(self.dev) };
+
+        if ret == 0 {
+            Err(FreenectError::LibraryReturnCode(ret))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn get_tilt_state(&mut self) -> *mut ft::freenect_raw_tilt_state {
+        unsafe { ft::freenect_get_tilt_state(self.dev) }
+    }
 }
 
 pub struct Device {
@@ -517,6 +567,13 @@ pub struct MotorSubdevice {
 impl MotorSubdevice {
     fn new(dev: Rc<RefCell<CDevice>>) -> MotorSubdevice {
         MotorSubdevice{dev: dev}
+    }
+
+    pub fn get_tilt_state(&mut self) -> FreenectResult<RawTiltState> {
+        let mut cdev = self.dev.borrow_mut();
+
+        try!(cdev.update_tilt_state());
+        Ok(RawTiltState::from_lowlevel(unsafe { cdev.get_tilt_state() }))
     }
 }
 
