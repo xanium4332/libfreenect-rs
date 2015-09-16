@@ -434,7 +434,7 @@ impl Drop for CDevice {
     fn drop(&mut self) {
         let ret = unsafe { ft::freenect_close_device(self.dev) };
 
-        if ret < 0 {
+        if ret != 0 {
             panic!(ret)
         }
     }
@@ -465,9 +465,9 @@ impl CDevice {
         let ret = unsafe { ft::freenect_start_depth(self.dev) };
 
         if ret == 0 {
-            Err(FreenectError::LibraryReturnCode(ret))
-        } else {
             Ok(())
+        } else {
+            Err(FreenectError::LibraryReturnCode(ret))
         }
     }
 
@@ -475,9 +475,9 @@ impl CDevice {
         let ret = unsafe { ft::freenect_start_video(self.dev) };
 
         if ret == 0 {
-            Err(FreenectError::LibraryReturnCode(ret))
-        } else {
             Ok(())
+        } else {
+            Err(FreenectError::LibraryReturnCode(ret))
         }
     }
 
@@ -485,9 +485,9 @@ impl CDevice {
         let ret = unsafe { ft::freenect_stop_depth(self.dev) };
 
         if ret == 0 {
-            Err(FreenectError::LibraryReturnCode(ret))
-        } else {
             Ok(())
+        } else {
+            Err(FreenectError::LibraryReturnCode(ret))
         }
     }
 
@@ -495,9 +495,9 @@ impl CDevice {
         let ret = unsafe { ft::freenect_stop_video(self.dev) };
 
         if ret == 0 {
-            Err(FreenectError::LibraryReturnCode(ret))
-        } else {
             Ok(())
+        } else {
+            Err(FreenectError::LibraryReturnCode(ret))
         }
     }
 
