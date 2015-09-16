@@ -257,7 +257,6 @@ pub struct DeviceAttributes {
     pub camera_serial: String,
 }
 
-#[derive(Debug)]
 struct InnerContext {
     ctx: *mut ft::freenect_context,
 }
@@ -292,7 +291,6 @@ impl Drop for InnerContext {
     }
 }
 
-#[derive(Debug)]
 pub struct Context {
     ctx: Rc<InnerContext>,
 }
@@ -500,7 +498,7 @@ pub struct Device {
 
 impl Device {
     fn from_raw_device(ctx: Rc<InnerContext>, dev: *mut ft::freenect_device, subdevs: DeviceFlags) -> Device {
-        let mut inner_dev = Rc::new(RefCell::new(CDevice::from_raw_device(dev)));
+        let inner_dev = Rc::new(RefCell::new(CDevice::from_raw_device(dev)));
 
         Device {
             ctx: ctx,
