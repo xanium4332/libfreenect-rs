@@ -583,11 +583,12 @@ struct ClosureHolder {
     dev: Rc<RefCell<CDevice>>,
     depth_cb: Option<Box<FnMut(&mut [u8], u32) + Send + 'static>>,
     video_cb: Option<Box<FnMut(&mut [u8], u32) + Send + 'static>>,
+    starting: bool,
 }
 
 impl ClosureHolder {
     fn new(dev: Rc<RefCell<CDevice>>) -> ClosureHolder {
-        ClosureHolder{dev: dev, depth_cb: None, video_cb: None}
+        ClosureHolder{dev: dev, depth_cb: None, video_cb: None, starting: false}
     }
 }
 
@@ -620,11 +621,17 @@ impl CameraSubdevice {
     }
 
     pub fn start_depth(&mut self) -> FreenectResult<()> {
-        self.dev.borrow_mut().start_depth()
+        (*self.ch).starting = true;
+        let ret = self.dev.borrow_mut().start_depth();
+        (*self.ch).starting = false;
+        return ret;
     }
 
     pub fn start_video(&mut self) -> FreenectResult<()> {
-        self.dev.borrow_mut().start_video()
+        (*self.ch).starting = true;
+        let ret = self.dev.borrow_mut().start_video();
+        (*self.ch).starting = false;
+        return ret;
     }
 
     pub fn stop_depth(&mut self) -> FreenectResult<()> {
@@ -655,17 +662,23 @@ impl CameraSubdevice {
         unsafe {
             let ch = ft::freenect_get_user(dev) as *mut ClosureHolder;
 
-            // Callback provides no information on frame buffer length. Retrieve the length by
-            // directly asking for the current mode information
-            let mode = (*ch).dev.borrow_mut().get_current_depth_mode();
+            // libfreenect end's up calling this callback when start_depth is called. This is an
+            // issue as the cdev RefCell will be borrowed twice (causing a panic). Instead, check a
+            // flag indicating we are starting, and if set, just ignore the frame.
 
-            let frame = slice::from_raw_parts_mut(depth as *mut u8, mode.bytes as usize);
-            let timestamp = timestamp as u32;
+            if !(*ch).starting {
+                // Callback provides no information on frame buffer length. Retrieve the length by
+                // directly asking for the current mode information
+                let mode = (*ch).dev.borrow_mut().get_current_depth_mode();
 
-            match (*ch).depth_cb {
-                Some(ref mut cb) => cb(frame, timestamp),
-                None => return,
-            };
+                let frame = slice::from_raw_parts_mut(depth as *mut u8, mode.bytes as usize);
+                let timestamp = timestamp as u32;
+
+                match (*ch).depth_cb {
+                    Some(ref mut cb) => cb(frame, timestamp),
+                    None => return,
+                };
+            }
         }
     }
 
@@ -673,17 +686,19 @@ impl CameraSubdevice {
         unsafe {
             let ch = ft::freenect_get_user(dev) as *mut ClosureHolder;
 
-            // Callback provides no information on frame buffer length. Retrieve the length by
-            // directly asking for the current mode information
-            let mode = (*ch).dev.borrow_mut().get_current_video_mode();
+            if !(*ch).starting {
+                // Callback provides no information on frame buffer length. Retrieve the length by
+                // directly asking for the current mode information
+                let mode = (*ch).dev.borrow_mut().get_current_video_mode();
 
-            let frame = slice::from_raw_parts_mut(video as *mut u8, mode.bytes as usize);
-            let timestamp = timestamp as u32;
+                let frame = slice::from_raw_parts_mut(video as *mut u8, mode.bytes as usize);
+                let timestamp = timestamp as u32;
 
-            match (*ch).video_cb {
-                Some(ref mut cb) => cb(frame, timestamp),
-                None => return,
-            };
+                match (*ch).video_cb {
+                    Some(ref mut cb) => cb(frame, timestamp),
+                    None => return,
+                };
+            }
         }
     }
 }
