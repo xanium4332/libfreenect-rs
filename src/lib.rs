@@ -280,6 +280,26 @@ impl RawTiltState {
     }
 }
 
+pub enum Flag {
+    AutoExposure,
+    AutoWhiteBalance,
+    RawColor,
+    MirrorDepth,
+    MirrorVideo,
+}
+
+impl Flag {
+    fn to_lowlevel(&self) -> ft::freenect_flag {
+        match *self {
+            Flag::AutoExposure        => ft::freenect_flag::FREENECT_AUTO_EXPOSURE,
+            Flag::AutoWhiteBalance    => ft::freenect_flag::FREENECT_AUTO_WHITE_BALANCE,
+            Flag::RawColor            => ft::freenect_flag::FREENECT_RAW_COLOR,
+            Flag::MirrorDepth         => ft::freenect_flag::FREENECT_MIRROR_DEPTH,
+            Flag::MirrorVideo         => ft::freenect_flag::FREENECT_MIRROR_VIDEO,
+        }
+    }
+}
+
 bitflags! {
     flags DeviceFlags: u32 {
         const DEVICE_MOTOR  = ft::freenect_device_flags::FREENECT_DEVICE_MOTOR  as u32,
@@ -497,6 +517,30 @@ impl CDevice {
         }
     }
 
+    fn update_tilt_state(&mut self) -> FreenectResult<()> {
+        let ret = unsafe { ft::freenect_update_tilt_state(self.dev) };
+
+        if ret == 0 {
+            Err(FreenectError::LibraryReturnCode(ret))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn get_tilt_state(&mut self) -> *mut ft::freenect_raw_tilt_state {
+        unsafe { ft::freenect_get_tilt_state(self.dev) }
+    }
+
+    fn set_tilt_degs(&mut self, angle: f64) -> FreenectResult<()> {
+        let ret = unsafe { ft::freenect_set_tilt_degs(self.dev, angle) };
+
+        if ret == 0 {
+            Err(FreenectError::LibraryReturnCode(ret))
+        } else {
+            Ok(())
+        }
+    }
+
     fn get_current_video_mode(&mut self) -> FrameMode {
         let lowlevel_video_mode = unsafe { ft::freenect_get_current_video_mode(self.dev) };
         FrameMode::from_lowlevel_video(&lowlevel_video_mode)
@@ -519,18 +563,20 @@ impl CDevice {
         Ok(())
     }
 
-    fn update_tilt_state(&mut self) -> FreenectResult<()> {
-        let ret = unsafe { ft::freenect_update_tilt_state(self.dev) };
+    fn set_flag(&mut self, flag: Flag, set: bool) -> FreenectResult<()> {
+        let flag_value = if set {
+            ft::freenect_flag_value::FREENECT_ON
+        } else {
+            ft::freenect_flag_value::FREENECT_OFF
+        };
+
+        let ret = unsafe { ft::freenect_set_flag(self.dev, flag.to_lowlevel(), flag_value) };
 
         if ret == 0 {
             Err(FreenectError::LibraryReturnCode(ret))
         } else {
             Ok(())
         }
-    }
-
-    fn get_tilt_state(&mut self) -> *mut ft::freenect_raw_tilt_state {
-        unsafe { ft::freenect_get_tilt_state(self.dev) }
     }
 }
 
@@ -638,6 +684,10 @@ impl CameraSubdevice {
         self.dev.borrow_mut().stop_video()
     }
 
+    pub fn set_tilt_degs(&mut self, angle: f64) -> FreenectResult<()> {
+        self.dev.borrow_mut().set_tilt_degs(angle)
+    }
+
     pub fn get_current_video_mode(&mut self) -> FrameMode {
         self.dev.borrow_mut().get_current_video_mode()
     }
@@ -652,6 +702,10 @@ impl CameraSubdevice {
 
     pub fn set_depth_mode(&mut self, mode: FrameMode) -> FreenectResult<()> {
         self.dev.borrow_mut().set_depth_mode(mode)
+    }
+
+    pub fn set_flag(&mut self, flag: Flag, set: bool) -> FreenectResult<()> {
+        self.dev.borrow_mut().set_flag(flag, set)
     }
 
     extern "C" fn depth_cb_trampoline(dev: *mut ft::freenect_device, depth: *mut c_void, timestamp: uint32_t) {
