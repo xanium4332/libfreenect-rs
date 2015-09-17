@@ -449,10 +449,6 @@ impl CDevice {
         unsafe { ft::freenect_set_user(self.dev, user) };
     }
 
-    fn get_user(&mut self) -> *mut c_void {
-        unsafe { ft::freenect_get_user(self.dev) }
-    }
-
     fn set_depth_callback(&mut self, cb: ft::freenect_depth_cb) {
         unsafe { ft::freenect_set_depth_callback(self.dev, cb) };
     }
@@ -573,7 +569,7 @@ impl MotorSubdevice {
         let mut cdev = self.dev.borrow_mut();
 
         try!(cdev.update_tilt_state());
-        Ok(RawTiltState::from_lowlevel(unsafe { cdev.get_tilt_state() }))
+        Ok(RawTiltState::from_lowlevel(cdev.get_tilt_state()))
     }
 }
 
