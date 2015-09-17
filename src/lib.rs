@@ -6,6 +6,7 @@ use std::slice;
 
 extern crate libc;
 use libc::{
+    c_int,
     c_void,
     uint32_t,
     int32_t,
@@ -790,4 +791,80 @@ pub fn find_depth_mode(res: Resolution, fmt: DepthFormat) -> Option<FrameMode> {
     } else {
         None
     }
+}
+
+pub struct VideoModeIter {
+    video_mode_count: c_int,
+    next_mode: c_int,
+}
+
+impl VideoModeIter {
+    fn new() -> VideoModeIter {
+        VideoModeIter{
+            video_mode_count: unsafe { ft::freenect_get_video_mode_count() },
+            next_mode: 0,
+        }
+    }
+}
+
+impl Iterator for VideoModeIter {
+    type Item = FrameMode;
+
+    fn next(&mut self) -> Option<FrameMode> {
+        if self.next_mode < self.video_mode_count {
+            let lowlevel_frame_mode = unsafe { ft::freenect_get_video_mode(self.next_mode) };
+            self.next_mode += 1;
+            Some(FrameMode::from_lowlevel_video(&lowlevel_frame_mode))
+        } else {
+            None
+        }
+    }
+}
+
+impl ExactSizeIterator for VideoModeIter {
+    fn len(&self) -> usize {
+        self.video_mode_count as usize
+    }
+}
+
+pub fn video_modes() -> VideoModeIter {
+    VideoModeIter::new()
+}
+
+pub struct DepthModeIter {
+    depth_mode_count: c_int,
+    next_mode: c_int,
+}
+
+impl DepthModeIter {
+    fn new() -> DepthModeIter {
+        DepthModeIter{
+            depth_mode_count: unsafe { ft::freenect_get_depth_mode_count() },
+            next_mode: 0,
+        }
+    }
+}
+
+impl Iterator for DepthModeIter {
+    type Item = FrameMode;
+
+    fn next(&mut self) -> Option<FrameMode> {
+        if self.next_mode < self.depth_mode_count {
+            let lowlevel_frame_mode = unsafe { ft::freenect_get_depth_mode(self.next_mode) };
+            self.next_mode += 1;
+            Some(FrameMode::from_lowlevel_depth(&lowlevel_frame_mode))
+        } else {
+            None
+        }
+    }
+}
+
+impl ExactSizeIterator for DepthModeIter {
+    fn len(&self) -> usize {
+        self.depth_mode_count as usize
+    }
+}
+
+pub fn depth_modes() -> DepthModeIter {
+    DepthModeIter::new()
 }
