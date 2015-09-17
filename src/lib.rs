@@ -717,3 +717,27 @@ pub fn supported_subdevices() -> DeviceFlags {
     let bits = unsafe { ft::freenect_supported_subdevices() as u32 };
     return DeviceFlags::from_bits(bits).unwrap();
 }
+
+pub fn find_video_mode(res: Resolution, fmt: VideoFormat) -> Option<FrameMode> {
+    let frame_mode_lowlevel = unsafe { ft::freenect_find_video_mode(res.to_lowlevel(), fmt.to_lowlevel()) };
+
+    let frame_mode = FrameMode::from_lowlevel_video(&frame_mode_lowlevel);
+
+    if frame_mode.is_valid {
+        Some(frame_mode)
+    } else {
+        None
+    }
+}
+
+pub fn find_depth_mode(res: Resolution, fmt: DepthFormat) -> Option<FrameMode> {
+    let frame_mode_lowlevel = unsafe { ft::freenect_find_depth_mode(res.to_lowlevel(), fmt.to_lowlevel()) };
+
+    let frame_mode = FrameMode::from_lowlevel_depth(&frame_mode_lowlevel);
+
+    if frame_mode.is_valid {
+        Some(frame_mode)
+    } else {
+        None
+    }
+}
