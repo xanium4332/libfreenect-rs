@@ -260,11 +260,11 @@ impl TiltStatus {
 }
 
 pub struct RawTiltState {
-    accelerometer_x: i16,
-    accelerometer_y: i16,
-    accelerometer_z: i16,
-    tilt_angle: i8,
-    tilt_status: TiltStatus,
+    pub accelerometer_x: i16,
+    pub accelerometer_y: i16,
+    pub accelerometer_z: i16,
+    pub tilt_angle: i8,
+    pub tilt_status: TiltStatus,
 }
 
 impl RawTiltState {
