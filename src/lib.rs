@@ -168,7 +168,7 @@ impl DepthFormat {
 }
 
 #[derive(Debug)]
-enum FrameModeFormat {
+pub enum FrameModeFormat {
     Video(VideoFormat),
     Depth(DepthFormat),
 }
@@ -176,15 +176,15 @@ enum FrameModeFormat {
 #[derive(Debug)]
 pub struct FrameMode {
     reserved: uint32_t, // Need to track contents of underlying freenect struct
-    resolution: Resolution,
-    format: FrameModeFormat,
-    bytes: i32,
-    width: i16,
-    height: i16,
-    data_bits_per_pixel: i8,
-    padding_bits_per_pixel: i8,
-    framerate: i8,
-    is_valid: bool,
+    pub resolution: Resolution,
+    pub format: FrameModeFormat,
+    pub bytes: i32,
+    pub width: i16,
+    pub height: i16,
+    pub data_bits_per_pixel: i8,
+    pub padding_bits_per_pixel: i8,
+    pub framerate: i8,
+    pub is_valid: bool,
 }
 
 impl FrameMode {
@@ -624,8 +624,8 @@ impl MotorSubdevice {
 // C callback userdata void pointer
 struct ClosureHolder {
     dev: Rc<RefCell<CDevice>>,
-    depth_cb: Option<Box<FnMut(&mut [u8], u32) + Send + 'static>>,
-    video_cb: Option<Box<FnMut(&mut [u8], u32) + Send + 'static>>,
+    depth_cb: Option<Box<FnMut(&FrameMode, &mut [u8], u32) + Send + 'static>>,
+    video_cb: Option<Box<FnMut(&FrameMode, &mut [u8], u32) + Send + 'static>>,
     starting: bool,
 }
 
@@ -655,11 +655,11 @@ impl CameraSubdevice {
         return cam_sub;
     }
 
-    pub fn set_depth_callback(&mut self, cb: Option<Box<FnMut(&mut [u8], u32) + Send + 'static>>) {
+    pub fn set_depth_callback(&mut self, cb: Option<Box<FnMut(&FrameMode, &mut [u8], u32) + Send + 'static>>) {
         self.ch.depth_cb = cb;
     }
 
-    pub fn set_video_callback(&mut self, cb: Option<Box<FnMut(&mut [u8], u32) + Send + 'static>>) {
+    pub fn set_video_callback(&mut self, cb: Option<Box<FnMut(&FrameMode, &mut [u8], u32) + Send + 'static>>) {
         self.ch.video_cb = cb;
     }
 
@@ -726,7 +726,7 @@ impl CameraSubdevice {
                 let timestamp = timestamp as u32;
 
                 match (*ch).depth_cb {
-                    Some(ref mut cb) => cb(frame, timestamp),
+                    Some(ref mut cb) => cb(&mode, frame, timestamp),
                     None => return,
                 };
             }
@@ -746,7 +746,7 @@ impl CameraSubdevice {
                 let timestamp = timestamp as u32;
 
                 match (*ch).video_cb {
-                    Some(ref mut cb) => cb(frame, timestamp),
+                    Some(ref mut cb) => cb(&mode, frame, timestamp),
                     None => return,
                 };
             }
