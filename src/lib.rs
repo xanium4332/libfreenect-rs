@@ -581,6 +581,7 @@ impl CDevice {
     }
 }
 
+#[allow(dead_code)]
 pub struct Device {
     ctx: Rc<InnerContext>, // Handle to prevent underlying context being free'd before device
     dev: Rc<RefCell<CDevice>>,
@@ -754,6 +755,7 @@ impl CameraSubdevice {
     }
 }
 
+#[allow(dead_code)]
 pub struct AudioSubdevice {
     dev: Rc<RefCell<CDevice>>,
 }
