@@ -625,7 +625,7 @@ impl MotorSubdevice {
 // C callback userdata void pointer
 struct ClosureHolder {
     dev: Rc<RefCell<CDevice>>,
-    depth_cb: Option<Box<FnMut(&FrameMode, &mut [u8], u32) + Send + 'static>>,
+    depth_cb: Option<Box<FnMut(&FrameMode, &mut [u16], u32) + Send + 'static>>,
     video_cb: Option<Box<FnMut(&FrameMode, &mut [u8], u32) + Send + 'static>>,
     starting: bool,
 }
@@ -656,7 +656,7 @@ impl CameraSubdevice {
         return cam_sub;
     }
 
-    pub fn set_depth_callback(&mut self, cb: Option<Box<FnMut(&FrameMode, &mut [u8], u32) + Send + 'static>>) {
+    pub fn set_depth_callback(&mut self, cb: Option<Box<FnMut(&FrameMode, &mut [u16], u32) + Send + 'static>>) {
         self.ch.depth_cb = cb;
     }
 
@@ -723,7 +723,7 @@ impl CameraSubdevice {
                 // directly asking for the current mode information
                 let mode = (*ch).dev.borrow_mut().get_current_depth_mode();
 
-                let frame = slice::from_raw_parts_mut(depth as *mut u8, mode.bytes as usize);
+                let frame = slice::from_raw_parts_mut(depth as *mut u16, mode.bytes as usize);
                 let timestamp = timestamp as u32;
 
                 match (*ch).depth_cb {
